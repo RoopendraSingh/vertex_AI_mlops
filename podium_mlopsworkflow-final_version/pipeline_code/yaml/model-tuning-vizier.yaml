@@ -1,0 +1,142 @@
+name: Model tuning vizier
+description: This function search for best hyperparameters for XGBClassifier
+inputs:
+- {name: trainfile, type: String}
+- {name: bucket_name_model, type: String}
+- {name: region, type: String}
+- {name: project_id, type: String}
+outputs:
+- {name: smetrics, type: Metrics}
+- {name: tuned_hp, type: String}
+implementation:
+  container:
+    image: python:3.9
+    command:
+    - sh
+    - -c
+    - |2
+
+      if ! [ -x "$(command -v pip)" ]; then
+          python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip
+      fi
+
+      PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'numpy' 'sklearn' 'pandas' 'dvc' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'google-api-python-client' 'xgboost' 'google-cloud-aiplatform' 'typing' 'numpyencoder' 'kfp==1.8.6' && "$0" "$@"
+    - sh
+    - -ec
+    - |
+      program_path=$(mktemp -d)
+      printf "%s" "$0" > "$program_path/ephemeral_component.py"
+      python3 -m kfp.v2.components.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+    - "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing\
+      \ import *\n\ndef model_tuning_vizier(trainfile: str, bucket_name_model: str,\
+      \ region: str, project_id: str, smetrics: Output[Metrics])-> NamedTuple(\"Outputs\"\
+      , [(\"tuned_hp\", str)]):\n    \"\"\" This function search for best hyperparameters\
+      \ for XGBClassifier\n        using vertex vizier.\n        Inputs:Train file\
+      \ path, Bucket to save hyperprameters Json\n        Outputs: Json path(Hyper\
+      \ parametrs)\n    \"\"\"\n    from google.cloud.aiplatform_v1beta1 import VizierServiceClient\n\
+      \    from typing import List, Dict\n    import pandas as pd\n    import datetime\n\
+      \    import json\n    import proto\n    import time\n    import numpy as np\n\
+      \    from xgboost import XGBClassifier\n    from google.cloud import storage\n\
+      \    from numpyencoder import NumpyEncoder\n    from sklearn.model_selection\
+      \ import train_test_split\n    from sklearn.metrics import log_loss\n\n    region\
+      \ = region\n    project_id = project_id\n    start= time.time()\n    def create_study(parameters:\
+      \ List[Dict],\n                     metrics: List[Dict],\n                 \
+      \    vizier_client,\n                     project_id: str,\n               \
+      \      location: str):\n        parent = f\"projects/{project_id}/locations/{location}\"\
+      \n        display_name = \"{}_study_{}\".format(project_id.replace(\"-\", \"\
+      \"),\n                                            datetime.datetime.now().strftime(\"\
+      %Y%m%d_%H%M%S\"))\n        \"\"\"ALGORITHM_UNSPECIFIED' means Bayesian optimization\n\
+      \           can also be 'GRID_SEARCH' or 'RANDOM_SEARCH\n        \"\"\"\n  \
+      \      study = {'display_name': display_name,\n                 'study_spec':\
+      \ {'algorithm': 'ALGORITHM_UNSPECIFIED',\n                                'parameters':\
+      \ parameters,\n                                'metrics': metrics}}\n      \
+      \  study = vizier_client.create_study(parent=parent, study=study)\n        return\
+      \ study.name\n\n    def params_to_dict(parameters):\n        return {p.parameter_id:\
+      \ p.value for p in parameters}\n\n    def run_study(metric_fn,\n           \
+      \       requests: int,\n                  suggestions_per_request: int,\n  \
+      \                client_id: str,\n                  study_id: str,\n       \
+      \           vizier_client):\n        for k in range(requests):\n           \
+      \ suggest_response = vizier_client.suggest_trials({\"parent\": study_id,\n \
+      \                                                            \"suggestion_count\"\
+      : suggestions_per_request,\n                                               \
+      \              \"client_id\": client_id})\n            print(f\"Request {k}\"\
+      )\n            for suggested_trial in suggest_response.result().trials:\n  \
+      \              suggested_params = params_to_dict(suggested_trial.parameters)\n\
+      \                metric = metric_fn(suggested_params)\n                print(\"\
+      Trial Results\", metric)\n                vizier_client.add_trial_measurement({'trial_name':suggested_trial.name,\n\
+      \                                                     'measurement': {'metrics':\
+      \ [metric]}})\n                response = vizier_client.complete_trial({\"name\"\
+      : suggested_trial.name,\n                                                  \
+      \       \"trial_infeasible\": False})\n\n    def get_optimal_trials(study_id,\
+      \ vizier_client):\n        optimal_trials = vizier_client.list_optimal_trials({'parent':\
+      \ study_id})\n        optimal_params = []\n        for trial in proto.Message.to_dict(optimal_trials)['optimal_trials']:\n\
+      \            optimal_params.append({p['parameter_id']: p['value'] for p in trial['parameters']})\n\
+      \        return optimal_params\n\n    #discrete_value_spec, integer_value_spec,\
+      \ double_value_spec\n    def get_params():\n        parameters = [{'parameter_id':'max_depth',\n\
+      \                       'integer_value_spec':{'min_value':2,'max_value':8}},\n\
+      \                      {'parameter_id':'min_child_weight',\n               \
+      \        'discrete_value_spec':{'values':np.arange(0.01,0.2,0.01)}},\n     \
+      \                 {'parameter_id':'learning_rate',\n                       'double_value_spec':{'min_value':0.005,'max_value':0.3}},\n\
+      \                      {'parameter_id':'subsample',\n                      \
+      \ 'discrete_value_spec':{'values':np.arange(0.1,1,0.1)}},\n                \
+      \      {'parameter_id':'colsample_bylevel',\n                       'discrete_value_spec':{'values':np.arange(0.1,1,0.1)}},\n\
+      \                      {'parameter_id':'colsample_bytree',\n               \
+      \        'discrete_value_spec':{'values':np.arange(0.1,1,0.1)}},\n         \
+      \             {'parameter_id':'n_estimators',\n                       'integer_value_spec':{'min_value':25,'max_value':100}},\n\
+      \                      {'parameter_id':'gamma',\n                       'discrete_value_spec':{'values':np.arange(0.5,1,0.1)}},\n\
+      \                      {'parameter_id':'eta',\n                       'double_value_spec':{'min_value':0.025,'max_value':0.5}}]\n\
+      \        return parameters\n\n    parameters = get_params()\n    end_point =\
+      \ region + \"-aiplatform.googleapis.com\"\n    vizier_client = VizierServiceClient(client_options=dict(api_endpoint=end_point))\n\
+      \n    def metric_fn(params):\n        max_depth = int(params['max_depth'])\n\
+      \        min_child_weight = float(params['min_child_weight'])\n        learning_rate\
+      \ = float(params['learning_rate'])\n        subsample = float(params['subsample'])\n\
+      \        colsample_bylevel = float(params['colsample_bylevel'])\n        colsample_bytree\
+      \ = float(params['colsample_bytree'])\n        n_estimators = int(params['n_estimators'])\n\
+      \        gamma = float(params['gamma'])\n        eta = float(params['eta'])\n\
+      \        df_train = pd.read_csv(trainfile)\n        adt_df_new = df_train.copy()\n\
+      \        train_no_taget = adt_df_new.drop(['class'], axis=1)\n        train_target\
+      \ = adt_df_new['class']\n        x_train, x_test, y_train, y_test = train_test_split(train_no_taget,train_target,\n\
+      \                                                            train_size = 0.75,\n\
+      \                                                            test_size=0.25,\
+      \ random_state=1)\n           # \"\"\"Train the model using XGBRegressor.\"\"\
+      \"\n        model = XGBClassifier(max_depth=max_depth,\n                   \
+      \           min_child_weight=min_child_weight,\n                           \
+      \   learning_rate=learning_rate,\n                              subsample=subsample,\n\
+      \                              colsample_bylevel=colsample_bylevel,\n      \
+      \                        colsample_bytree=colsample_bytree,\n              \
+      \                n_estimators=n_estimators,\n                              gamma=gamma,\n\
+      \                              eta=eta,                       \n           \
+      \                   eval_metric= 'logloss',\n                              n_jobs=-1,\n\
+      \                              booster= 'gbtree',\n                        \
+      \      tree_method= 'hist',\n                              verbosity=0,\n  \
+      \                            use_label_encoder=False,\n                    \
+      \          random_state=124)\n        model.fit(x_train,y_train)\n        #predictions=\
+      \ model.predict(X_train)\n        loss= float(log_loss(y_test, model.predict_proba(x_test)))\n\
+      \        #print('log loss value is:'+ str(r2_scor))\n        return {'value':\
+      \ loss}\n\n    metrics = [{'metric_id': 'log_loss',  # the name of the quantity\
+      \ we want to minimize\n                'goal': 'MINIMIZE',  # choose MINIMIZE\
+      \ or MAXIMIZE\n               }]\n    # Call a helper function to create the\
+      \ study\n    study_id = create_study(location = region,\n                  \
+      \          parameters=parameters,\n                            metrics=metrics,\n\
+      \                            vizier_client=vizier_client,\n                \
+      \            project_id=project_id)\n    run_study(metric_fn,\n            \
+      \  requests=10,\n              # set >1 to get suggestions \"in parallel\",\
+      \ good for distributed training\n              suggestions_per_request=5,\n\
+      \              # keep the name the same to resume a trial\n              client_id=\"\
+      client_1\",\n              study_id=study_id,\n              vizier_client=vizier_client,)\n\
+      \    params = get_optimal_trials(study_id, vizier_client)[0]\n    print(params)\n\
+      \    max_depth = int(params['max_depth'])\n    learning_rate = round(float(params['learning_rate']),2)\n\
+      \    n_estimators = int(params['n_estimators'])\n    smetrics.log_metric(\"\
+      max_depth\", max_depth)\n    smetrics.log_metric(\"learning_rate\", learning_rate)\n\
+      \    smetrics.log_metric(\"n_estimator\", n_estimators)\n    json_filename =\
+      \ \"hptuned_vizier.json\"\n    with open(json_filename, 'w') as file:\n    \
+      \    json.dump(params, file, cls=NumpyEncoder)\n    storage_client = storage.Client()\n\
+      \    bucket = storage_client.bucket(bucket_name_model)\n    bucket.blob('vizier_model_hp/'+json_filename).upload_from_filename(json_filename)\n\
+      \    file_path= f\"gs://{bucket_name_model}/vizier_model_hp/hptuned_vizier.json\"\
+      \n    end= time.time()\n    smetrics.log_metric(\"time taken for 50 trials\"\
+      , (end-start))\n    return (file_path,)\n\n"
+    args:
+    - --executor_input
+    - {executorInput: null}
+    - --function_to_execute
+    - model_tuning_vizier

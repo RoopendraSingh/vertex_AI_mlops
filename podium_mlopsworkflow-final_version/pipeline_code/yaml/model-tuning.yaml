@@ -1,0 +1,83 @@
+name: Model tuning
+description: This function search for best hyperparameters for XGBClassifier
+inputs:
+- {name: train_file, type: String}
+- {name: bucket_name_model, type: String}
+outputs:
+- {name: smetrics, type: Metrics}
+- {name: tuned_hp, type: String}
+implementation:
+  container:
+    image: python:3.9
+    command:
+    - sh
+    - -c
+    - |2
+
+      if ! [ -x "$(command -v pip)" ]; then
+          python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip
+      fi
+
+      PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'numpy' 'sklearn' 'pandas' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'xgboost' 'hyperopt' 'numpyencoder' 'kfp==1.8.6' && "$0" "$@"
+    - sh
+    - -ec
+    - |
+      program_path=$(mktemp -d)
+      printf "%s" "$0" > "$program_path/ephemeral_component.py"
+      python3 -m kfp.v2.components.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+    - "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing\
+      \ import *\n\ndef model_tuning(train_file: str, bucket_name_model: str,smetrics:\
+      \ Output[Metrics])-> NamedTuple(\"Outputs\", [(\"tuned_hp\", str)]):  \n   \
+      \ \"\"\" This function search for best hyperparameters for XGBClassifier\n \
+      \       using hyperopt.\n        Inputs:Train file path, Bucket to save hyperprameters\
+      \ Json\n        Outputs: Json path(Hyper parametrs)\n    \"\"\"\n    from xgboost\
+      \ import XGBClassifier\n    import pandas as pd\n    from hyperopt import hp,\
+      \ fmin, tpe, rand, STATUS_OK, Trials\n    from sklearn.model_selection import\
+      \ KFold\n    from sklearn.model_selection import cross_val_score\n    from sklearn.model_selection\
+      \ import RepeatedStratifiedKFold\n    import time\n    import numpy as np\n\
+      \    from hyperopt import space_eval\n    from hyperopt import Trials\n    from\
+      \ google.cloud import storage\n    import json\n    from numpyencoder import\
+      \ NumpyEncoder\n    # Set up the XGBoost version\n    # Declare xgboost search\
+      \ space for Hyperopt\n    start= time.time()\n    train = pd.read_csv(train_file)\n\
+      \    train_features = train.drop(['class'], axis=1)\n    train_target = train['class']\n\
+      \    #best_score =1\n    xgboost_space={'max_depth': hp.choice('x_max_depth',[2,3,4,5,6,7,8]),\n\
+      \                   'min_child_weight':hp.choice('x_min_child_weight',\n   \
+      \                                             np.round(np.arange(0.0,0.2,0.01),5)),\n\
+      \                   'learning_rate':hp.choice('x_learning_rate',\n         \
+      \                                    np.round(np.arange(0.005,0.3,0.01),5)),\n\
+      \                   'subsample':hp.choice('x_subsample',\n                 \
+      \                        np.round(np.arange(0.1,1.0,0.05),5)),\n           \
+      \        'colsample_bylevel':hp.choice('x_colsample_bylevel',\n            \
+      \                                     np.round(np.arange(0.1,1.0,0.05),5)),\n\
+      \                   'colsample_bytree':hp.choice('x_colsample_bytree',\n   \
+      \                                             np.round(np.arange(0.1,1.0,0.05),5)),\n\
+      \                   'n_estimators':hp.choice('x_n_estimators',np.arange(25,100,5)),\n\
+      \                   'gamma': hp.quniform('gamma', 0.5, 1, 0.05),\n         \
+      \          'eta': hp.quniform('eta', 0.025, 0.5, 0.025),\n                 \
+      \  'booster': 'gbtree',\n                   'tree_method': 'hist',\n       \
+      \            'eval_metric': 'logloss'}\n    def objective(space):\n        #global\
+      \ best_score\n        best_score = 1\n        model = XGBClassifier(**space,\
+      \ n_jobs=-1, use_label_encoder=False)\n        kfold = RepeatedStratifiedKFold(n_splits=5,\
+      \ n_repeats=3, random_state=1114)\n        score = -cross_val_score(model,train_features,train_target,\n\
+      \                                 cv=kfold,\n                              \
+      \   scoring='neg_log_loss',\n                                 verbose=False).mean()\n\
+      \        if (score < best_score):\n            best_score = score\n        return\
+      \ score\n    start = time.time()\n    trials = Trials()\n    best = fmin(objective,space\
+      \ = xgboost_space, algo = tpe.suggest,max_evals = 50,trials = trials)\n    print(\"\
+      Hyperopt search took %.2f seconds for 100 candidates\" % ((time.time() - start)))\n\
+      \    tuned_hp_dict= space_eval(xgboost_space, best)\n    print(tuned_hp_dict)\n\
+      \    json_file_name = \"hptuned.json\"   \n    with open(json_file_name, 'w')\
+      \ as file:  \n        json.dump(tuned_hp_dict, file, cls=NumpyEncoder)\n   \
+      \ storage_client = storage.Client()\n    bucket = storage_client.bucket(bucket_name_model)\n\
+      \    bucket.blob('tuned_hp/'+json_file_name).upload_from_filename(json_file_name)\n\
+      \    file_path= f\"gs://{bucket_name_model}/tuned_hp/hptuned.json\"\n    end=\
+      \ time.time()\n    smetrics.log_metric(\"max_depth\",float(tuned_hp_dict['max_depth']))\n\
+      \    smetrics.log_metric(\"n_estimators\",float(tuned_hp_dict['n_estimators']))\n\
+      \    smetrics.log_metric(\"learning_rate\",float(tuned_hp_dict['learning_rate']))\n\
+      \    smetrics.log_metric(\"time taken for 50 trials\", (end-start))\n    return\
+      \ (file_path,)\n\n"
+    args:
+    - --executor_input
+    - {executorInput: null}
+    - --function_to_execute
+    - model_tuning

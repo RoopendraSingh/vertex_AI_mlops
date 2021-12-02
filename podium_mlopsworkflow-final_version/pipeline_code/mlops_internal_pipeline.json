@@ -1,0 +1,1240 @@
+{
+  "pipelineSpec": {
+    "components": {
+      "comp-auto-ml-exp": {
+        "executorLabel": "exec-auto-ml-exp",
+        "inputDefinitions": {
+          "parameters": {
+            "auto_ml_bucket": {
+              "type": "STRING"
+            },
+            "location": {
+              "type": "STRING"
+            },
+            "project": {
+              "type": "STRING"
+            },
+            "testfile": {
+              "type": "STRING"
+            },
+            "trainfile": {
+              "type": "STRING"
+            }
+          }
+        },
+        "outputDefinitions": {
+          "artifacts": {
+            "smetrics": {
+              "artifactType": {
+                "schemaTitle": "system.Metrics",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          }
+        }
+      },
+      "comp-condition-data-validation-success-check-1": {
+        "dag": {
+          "outputs": {
+            "artifacts": {
+              "auto-ml-exp-smetrics": {
+                "artifactSelectors": [
+                  {
+                    "outputArtifactKey": "smetrics",
+                    "producerSubtask": "auto-ml-exp"
+                  }
+                ]
+              },
+              "model-deployment-metrics": {
+                "artifactSelectors": [
+                  {
+                    "outputArtifactKey": "metrics",
+                    "producerSubtask": "model-deployment"
+                  }
+                ]
+              },
+              "model-e-v-r-metrics": {
+                "artifactSelectors": [
+                  {
+                    "outputArtifactKey": "metrics",
+                    "producerSubtask": "model-e-v-r"
+                  }
+                ]
+              },
+              "model-evaluation-vizier-metrics": {
+                "artifactSelectors": [
+                  {
+                    "outputArtifactKey": "metrics",
+                    "producerSubtask": "model-evaluation-vizier"
+                  }
+                ]
+              },
+              "model-tuning-smetrics": {
+                "artifactSelectors": [
+                  {
+                    "outputArtifactKey": "smetrics",
+                    "producerSubtask": "model-tuning"
+                  }
+                ]
+              },
+              "model-tuning-vizier-smetrics": {
+                "artifactSelectors": [
+                  {
+                    "outputArtifactKey": "smetrics",
+                    "producerSubtask": "model-tuning-vizier"
+                  }
+                ]
+              }
+            }
+          },
+          "tasks": {
+            "auto-ml-exp": {
+              "cachingOptions": {
+                "enableCache": true
+              },
+              "componentRef": {
+                "name": "comp-auto-ml-exp"
+              },
+              "dependentTasks": [
+                "data-transformation"
+              ],
+              "inputs": {
+                "parameters": {
+                  "auto_ml_bucket": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "mlops-automl-model"
+                      }
+                    }
+                  },
+                  "location": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "us-central1"
+                      }
+                    }
+                  },
+                  "project": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "advanced-analytics-engineering"
+                      }
+                    }
+                  },
+                  "testfile": {
+                    "taskOutputParameter": {
+                      "outputParameterKey": "test_data",
+                      "producerTask": "data-transformation"
+                    }
+                  },
+                  "trainfile": {
+                    "taskOutputParameter": {
+                      "outputParameterKey": "train_data",
+                      "producerTask": "data-transformation"
+                    }
+                  }
+                }
+              },
+              "taskInfo": {
+                "name": "auto-ml-exp"
+              }
+            },
+            "data-transformation": {
+              "cachingOptions": {
+                "enableCache": true
+              },
+              "componentRef": {
+                "name": "comp-data-transformation"
+              },
+              "inputs": {
+                "parameters": {
+                  "bucket_tranformed_data": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "mlops-transformed-data"
+                      }
+                    }
+                  },
+                  "gcs_file": {
+                    "componentInputParameter": "pipelineparam--data-ingestion-gcsFile"
+                  }
+                }
+              },
+              "taskInfo": {
+                "name": "data-transformation"
+              }
+            },
+            "model-deployment": {
+              "cachingOptions": {
+                "enableCache": true
+              },
+              "componentRef": {
+                "name": "comp-model-deployment"
+              },
+              "dependentTasks": [
+                "model-e-v-r"
+              ],
+              "inputs": {
+                "parameters": {
+                  "PIPELINE_NAME": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "mlops-customer-churn-pilot"
+                      }
+                    }
+                  },
+                  "PROJECT_ID": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "advanced-analytics-engineering"
+                      }
+                    }
+                  },
+                  "PROJECT_NUMBER": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "844226895177"
+                      }
+                    }
+                  },
+                  "REGION": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "us-central1"
+                      }
+                    }
+                  },
+                  "flag": {
+                    "taskOutputParameter": {
+                      "outputParameterKey": "check",
+                      "producerTask": "model-e-v-r"
+                    }
+                  },
+                  "model_path": {
+                    "taskOutputParameter": {
+                      "outputParameterKey": "new_model_path",
+                      "producerTask": "model-e-v-r"
+                    }
+                  }
+                }
+              },
+              "taskInfo": {
+                "name": "model-deployment"
+              }
+            },
+            "model-e-v-r": {
+              "cachingOptions": {
+                "enableCache": true
+              },
+              "componentRef": {
+                "name": "comp-model-e-v-r"
+              },
+              "dependentTasks": [
+                "data-transformation",
+                "model-training"
+              ],
+              "inputs": {
+                "artifacts": {
+                  "model": {
+                    "taskOutputArtifact": {
+                      "outputArtifactKey": "model",
+                      "producerTask": "model-training"
+                    }
+                  }
+                },
+                "parameters": {
+                  "BUCKET_NAME_TESTING": {
+                    "taskOutputParameter": {
+                      "outputParameterKey": "test_data",
+                      "producerTask": "data-transformation"
+                    }
+                  },
+                  "BUCKET_NAME_THRESHOLD": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "podium_mlops_model_metrics"
+                      }
+                    }
+                  },
+                  "MODEL_BUCKET_NAME": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "mlops_model"
+                      }
+                    }
+                  }
+                }
+              },
+              "taskInfo": {
+                "name": "model-e-v-r"
+              }
+            },
+            "model-evaluation-vizier": {
+              "cachingOptions": {
+                "enableCache": true
+              },
+              "componentRef": {
+                "name": "comp-model-evaluation-vizier"
+              },
+              "dependentTasks": [
+                "data-transformation",
+                "model-training-vizier"
+              ],
+              "inputs": {
+                "artifacts": {
+                  "model": {
+                    "taskOutputArtifact": {
+                      "outputArtifactKey": "model",
+                      "producerTask": "model-training-vizier"
+                    }
+                  }
+                },
+                "parameters": {
+                  "BUCKET_NAME_TESTING": {
+                    "taskOutputParameter": {
+                      "outputParameterKey": "test_data",
+                      "producerTask": "data-transformation"
+                    }
+                  },
+                  "BUCKET_NAME_THRESHOLD": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "podium_mlops_model_metrics"
+                      }
+                    }
+                  },
+                  "MODEL_BUCKET_NAME": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "mlops_model"
+                      }
+                    }
+                  }
+                }
+              },
+              "taskInfo": {
+                "name": "model-evaluation-vizier"
+              }
+            },
+            "model-training": {
+              "cachingOptions": {
+                "enableCache": true
+              },
+              "componentRef": {
+                "name": "comp-model-training"
+              },
+              "dependentTasks": [
+                "data-transformation",
+                "model-tuning"
+              ],
+              "inputs": {
+                "parameters": {
+                  "trainfile": {
+                    "taskOutputParameter": {
+                      "outputParameterKey": "train_data",
+                      "producerTask": "data-transformation"
+                    }
+                  },
+                  "tuned_hp": {
+                    "taskOutputParameter": {
+                      "outputParameterKey": "tuned_hp",
+                      "producerTask": "model-tuning"
+                    }
+                  }
+                }
+              },
+              "taskInfo": {
+                "name": "model-training"
+              }
+            },
+            "model-training-vizier": {
+              "cachingOptions": {
+                "enableCache": true
+              },
+              "componentRef": {
+                "name": "comp-model-training-vizier"
+              },
+              "dependentTasks": [
+                "data-transformation",
+                "model-tuning-vizier"
+              ],
+              "inputs": {
+                "parameters": {
+                  "trainfile": {
+                    "taskOutputParameter": {
+                      "outputParameterKey": "train_data",
+                      "producerTask": "data-transformation"
+                    }
+                  },
+                  "tuned_hp": {
+                    "taskOutputParameter": {
+                      "outputParameterKey": "tuned_hp",
+                      "producerTask": "model-tuning-vizier"
+                    }
+                  }
+                }
+              },
+              "taskInfo": {
+                "name": "model-training-vizier"
+              }
+            },
+            "model-tuning": {
+              "cachingOptions": {
+                "enableCache": true
+              },
+              "componentRef": {
+                "name": "comp-model-tuning"
+              },
+              "dependentTasks": [
+                "data-transformation"
+              ],
+              "inputs": {
+                "parameters": {
+                  "bucket_name_model": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "mlops-trained-model"
+                      }
+                    }
+                  },
+                  "train_file": {
+                    "taskOutputParameter": {
+                      "outputParameterKey": "train_data",
+                      "producerTask": "data-transformation"
+                    }
+                  }
+                }
+              },
+              "taskInfo": {
+                "name": "model-tuning"
+              }
+            },
+            "model-tuning-vizier": {
+              "cachingOptions": {
+                "enableCache": true
+              },
+              "componentRef": {
+                "name": "comp-model-tuning-vizier"
+              },
+              "dependentTasks": [
+                "data-transformation"
+              ],
+              "inputs": {
+                "parameters": {
+                  "bucket_name_model": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "mlops-trained-model"
+                      }
+                    }
+                  },
+                  "project_id": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "advanced-analytics-engineering"
+                      }
+                    }
+                  },
+                  "region": {
+                    "runtimeValue": {
+                      "constantValue": {
+                        "stringValue": "us-central1"
+                      }
+                    }
+                  },
+                  "trainfile": {
+                    "taskOutputParameter": {
+                      "outputParameterKey": "train_data",
+                      "producerTask": "data-transformation"
+                    }
+                  }
+                }
+              },
+              "taskInfo": {
+                "name": "model-tuning-vizier"
+              }
+            }
+          }
+        },
+        "inputDefinitions": {
+          "parameters": {
+            "pipelineparam--data-ingestion-gcsFile": {
+              "type": "STRING"
+            },
+            "pipelineparam--data-validation-data_validation_sucess_output_flag": {
+              "type": "STRING"
+            }
+          }
+        },
+        "outputDefinitions": {
+          "artifacts": {
+            "auto-ml-exp-smetrics": {
+              "artifactType": {
+                "schemaTitle": "system.Metrics",
+                "schemaVersion": "0.0.1"
+              }
+            },
+            "model-deployment-metrics": {
+              "artifactType": {
+                "schemaTitle": "system.Metrics",
+                "schemaVersion": "0.0.1"
+              }
+            },
+            "model-e-v-r-metrics": {
+              "artifactType": {
+                "schemaTitle": "system.Metrics",
+                "schemaVersion": "0.0.1"
+              }
+            },
+            "model-evaluation-vizier-metrics": {
+              "artifactType": {
+                "schemaTitle": "system.Metrics",
+                "schemaVersion": "0.0.1"
+              }
+            },
+            "model-tuning-smetrics": {
+              "artifactType": {
+                "schemaTitle": "system.Metrics",
+                "schemaVersion": "0.0.1"
+              }
+            },
+            "model-tuning-vizier-smetrics": {
+              "artifactType": {
+                "schemaTitle": "system.Metrics",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          }
+        }
+      },
+      "comp-data-ingestion": {
+        "executorLabel": "exec-data-ingestion",
+        "inputDefinitions": {
+          "parameters": {
+            "bucket_name": {
+              "type": "STRING"
+            },
+            "notebook_path": {
+              "type": "STRING"
+            }
+          }
+        },
+        "outputDefinitions": {
+          "artifacts": {
+            "smetrics": {
+              "artifactType": {
+                "schemaTitle": "system.Metrics",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          },
+          "parameters": {
+            "gcsFile": {
+              "type": "STRING"
+            }
+          }
+        }
+      },
+      "comp-data-transformation": {
+        "executorLabel": "exec-data-transformation",
+        "inputDefinitions": {
+          "parameters": {
+            "bucket_tranformed_data": {
+              "type": "STRING"
+            },
+            "gcs_file": {
+              "type": "STRING"
+            }
+          }
+        },
+        "outputDefinitions": {
+          "parameters": {
+            "test_data": {
+              "type": "STRING"
+            },
+            "train_data": {
+              "type": "STRING"
+            }
+          }
+        }
+      },
+      "comp-data-validation": {
+        "executorLabel": "exec-data-validation",
+        "inputDefinitions": {
+          "parameters": {
+            "gcs_file": {
+              "type": "STRING"
+            }
+          }
+        },
+        "outputDefinitions": {
+          "parameters": {
+            "data_validation_sucess_output_flag": {
+              "type": "STRING"
+            }
+          }
+        }
+      },
+      "comp-model-deployment": {
+        "executorLabel": "exec-model-deployment",
+        "inputDefinitions": {
+          "parameters": {
+            "PIPELINE_NAME": {
+              "type": "STRING"
+            },
+            "PROJECT_ID": {
+              "type": "STRING"
+            },
+            "PROJECT_NUMBER": {
+              "type": "STRING"
+            },
+            "REGION": {
+              "type": "STRING"
+            },
+            "flag": {
+              "type": "STRING"
+            },
+            "model_path": {
+              "type": "STRING"
+            }
+          }
+        },
+        "outputDefinitions": {
+          "artifacts": {
+            "metrics": {
+              "artifactType": {
+                "schemaTitle": "system.Metrics",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          },
+          "parameters": {
+            "endpoint_name": {
+              "type": "STRING"
+            }
+          }
+        }
+      },
+      "comp-model-e-v-r": {
+        "executorLabel": "exec-model-e-v-r",
+        "inputDefinitions": {
+          "artifacts": {
+            "model": {
+              "artifactType": {
+                "schemaTitle": "system.Model",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          },
+          "parameters": {
+            "BUCKET_NAME_TESTING": {
+              "type": "STRING"
+            },
+            "BUCKET_NAME_THRESHOLD": {
+              "type": "STRING"
+            },
+            "MODEL_BUCKET_NAME": {
+              "type": "STRING"
+            }
+          }
+        },
+        "outputDefinitions": {
+          "artifacts": {
+            "metrics": {
+              "artifactType": {
+                "schemaTitle": "system.Metrics",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          },
+          "parameters": {
+            "check": {
+              "type": "STRING"
+            },
+            "new_model_path": {
+              "type": "STRING"
+            }
+          }
+        }
+      },
+      "comp-model-evaluation-vizier": {
+        "executorLabel": "exec-model-evaluation-vizier",
+        "inputDefinitions": {
+          "artifacts": {
+            "model": {
+              "artifactType": {
+                "schemaTitle": "system.Model",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          },
+          "parameters": {
+            "BUCKET_NAME_TESTING": {
+              "type": "STRING"
+            },
+            "BUCKET_NAME_THRESHOLD": {
+              "type": "STRING"
+            },
+            "MODEL_BUCKET_NAME": {
+              "type": "STRING"
+            }
+          }
+        },
+        "outputDefinitions": {
+          "artifacts": {
+            "metrics": {
+              "artifactType": {
+                "schemaTitle": "system.Metrics",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          },
+          "parameters": {
+            "check": {
+              "type": "STRING"
+            },
+            "new_model_path": {
+              "type": "STRING"
+            }
+          }
+        }
+      },
+      "comp-model-training": {
+        "executorLabel": "exec-model-training",
+        "inputDefinitions": {
+          "parameters": {
+            "trainfile": {
+              "type": "STRING"
+            },
+            "tuned_hp": {
+              "type": "STRING"
+            }
+          }
+        },
+        "outputDefinitions": {
+          "artifacts": {
+            "model": {
+              "artifactType": {
+                "schemaTitle": "system.Model",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          }
+        }
+      },
+      "comp-model-training-vizier": {
+        "executorLabel": "exec-model-training-vizier",
+        "inputDefinitions": {
+          "parameters": {
+            "trainfile": {
+              "type": "STRING"
+            },
+            "tuned_hp": {
+              "type": "STRING"
+            }
+          }
+        },
+        "outputDefinitions": {
+          "artifacts": {
+            "model": {
+              "artifactType": {
+                "schemaTitle": "system.Model",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          }
+        }
+      },
+      "comp-model-tuning": {
+        "executorLabel": "exec-model-tuning",
+        "inputDefinitions": {
+          "parameters": {
+            "bucket_name_model": {
+              "type": "STRING"
+            },
+            "train_file": {
+              "type": "STRING"
+            }
+          }
+        },
+        "outputDefinitions": {
+          "artifacts": {
+            "smetrics": {
+              "artifactType": {
+                "schemaTitle": "system.Metrics",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          },
+          "parameters": {
+            "tuned_hp": {
+              "type": "STRING"
+            }
+          }
+        }
+      },
+      "comp-model-tuning-vizier": {
+        "executorLabel": "exec-model-tuning-vizier",
+        "inputDefinitions": {
+          "parameters": {
+            "bucket_name_model": {
+              "type": "STRING"
+            },
+            "project_id": {
+              "type": "STRING"
+            },
+            "region": {
+              "type": "STRING"
+            },
+            "trainfile": {
+              "type": "STRING"
+            }
+          }
+        },
+        "outputDefinitions": {
+          "artifacts": {
+            "smetrics": {
+              "artifactType": {
+                "schemaTitle": "system.Metrics",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          },
+          "parameters": {
+            "tuned_hp": {
+              "type": "STRING"
+            }
+          }
+        }
+      }
+    },
+    "deploymentSpec": {
+      "executors": {
+        "exec-auto-ml-exp": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "auto_ml_exp"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'numpy' 'pandas' 'google-cloud' 'google-cloud-storage' 'google-api-python-client' 'google-cloud-aiplatform' 'fsspec' 'gcsfs' 'kfp==1.8.6' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef auto_ml_exp(trainfile: str,testfile: str, auto_ml_bucket:str, \n                project: str, location: str, smetrics: Output[Metrics]):   \n    import pandas as pd\n    import numpy as np\n    from google.cloud import storage\n    from google.cloud import aiplatform\n    import fsspec\n    \"\"\"\n    It runs AutoML tables\n    Inputs: train file path,\n            test file path,\n            region,project_id\n    outputs: shows f1-score as metrics\n    \"\"\"\n    #take train and test and merge it into one df with additional column for train,test split.\n    # UNASSIGNED: means automl take it as train or validation data\n    def train_test_merge (train_data, test_data,gcs_bucket):\n        train= pd.read_csv(train_data)\n        test= pd.read_csv(test_data)\n        train['split_cat']= 'UNASSIGNED'\n        test['split_cat']= 'TEST'\n        data= train.append(test)\n        data_path = f\"gs://{gcs_bucket}/data_auto_ml.csv\"\n        data.to_csv(data_path, index = False)\n        test_data_len= len(test)\n        return data_path, test_data_len    \n    #load the whole dataset to vertex AI and fetch the dataset ID. \n    def create_and_import_dataset_tabular_gcs(\n        display_name: str, \n        project: str, \n        location: str, \n        gcs_source,):\n\n        aiplatform.init(project=project, location=location)\n        dataset = aiplatform.TabularDataset.create(\n            display_name=display_name, gcs_source=gcs_source,)\n        dataset.wait()\n        res_name= dataset.resource_name\n        print(f'\\tname: \"{res_name}\"')\n        #e.g = projects/844226895177/locations/us-central1/datasets/5221985340587245568\n        dataset_id = res_name.split('/')[-1]\n        return (dataset_id)\n    #create the autoML training job\n    def create_training_pipeline_tabular_classification(\n        project: str,\n        display_name: str,\n        dataset_id: int,\n        location: str,\n        target_col: str,\n        predefined_split_column_name: str= 'split_cat',\n        model_display_name: str = None,\n        #training_fraction_split: float = 0.75,(no need in case of explicitly mentioned in data)\n        #validation_fraction_split: float = 0.10,\n        #test_fraction_split: float = 0.15,\n        budget_milli_node_hours: int = 100,#(how many hours are allowed for training)\n        disable_early_stopping: bool = False,\n        sync:bool = True):\n\n        aiplatform.init(project=project, location=location)\n\n        tabular_classification_job = aiplatform.AutoMLTabularTrainingJob(\n            display_name=display_name,\n            optimization_prediction_type= 'classification')\n        my_tabular_dataset = aiplatform.TabularDataset(dataset_id)\n        print(my_tabular_dataset)\n        model = tabular_classification_job.run(\n            dataset=my_tabular_dataset,\n            predefined_split_column_name=predefined_split_column_name,\n            budget_milli_node_hours=budget_milli_node_hours,\n            model_display_name=model_display_name,\n            disable_early_stopping=disable_early_stopping,\n            sync=sync,\n            target_column=target_col,)\n        model.wait()\n        return model.resource_name\n    #this function is for getting the f1-score as model metrics\n    def getting_f1_score(\n        model_resource_name,\n        api_endpoint: str = \"us-central1-aiplatform.googleapis.com\",):\n\n        client_options = {\"api_endpoint\": api_endpoint}\n        client = aiplatform.gapic.ModelServiceClient(client_options=client_options)\n        path= client.list_model_evaluations(parent = model_resource_name)\n        for x in path:\n            metric= x.metrics['confidenceMetrics']\n            for y in metric[51].items(): #for 0.5 threshold\n                if y[0]== 'f1Score':\n                    f1_score= y[1]\n                    break\n        return (f1_score)\n    data_path, test_data_len= train_test_merge(trainfile, testfile, auto_ml_bucket)\n    data_id= create_and_import_dataset_tabular_gcs('automl_data',project,location,data_path)\n    model_res_name= create_training_pipeline_tabular_classification(project,\n                                                           'automl_model',\n                                                           data_id,\n                                                           location,\n                                                           'class',)\n    f1_score_= getting_f1_score(model_res_name)\n    smetrics.log_metric(\"F1-Score_1\",f1_score_)\n    smetrics.log_metric(\"framework\", \"XGB Classifier\")\n    smetrics.log_metric(\"dataset_size\", test_data_len)\n    return None\n\n"
+            ],
+            "image": "python:3.9"
+          }
+        },
+        "exec-data-ingestion": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "data_ingestion"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'google-api-python-client' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'kfp==1.8.6' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef data_ingestion(bucket_name: str,notebook_path:str,smetrics: Output[Metrics])-> NamedTuple(\"Outputs\", [(\"gcsFile\", str)]):\n    from google.cloud import storage\n\n    \"\"\"This module returns the filepath\"\"\"\n    def list_blobs_with_prefix(bucket_name:str, delimiter=None):\n        \"\"\"Gives the last updated file path\n           Inputs: GCS bucket name\n           Outputs: train file path\n        \"\"\"\n        storage_client = storage.Client()\n        blobs = storage_client.list_blobs(bucket_name, delimiter=delimiter)\n        dict_blob = {}\n        for blob in blobs:\n            dict_blob[blob.name] = blob.updated\n        blob_update_list = list(dict_blob.values())\n        sorted_dict_blob = {k: v for k, v in sorted(dict_blob.items(),\n                                                    key=lambda item: item[1], reverse = True)}\n        get_latest_file_name = list(sorted_dict_blob.keys())[0]\n        return get_latest_file_name\n    file_name = list_blobs_with_prefix(bucket_name,delimiter=None)\n    get_gcs_File = f'gs://{bucket_name}/'+file_name\n    print(\"Data DownLoaded Sucessfully\")\n    print(get_gcs_File)\n    if notebook_path == 'NA':\n        return(get_gcs_File,)\n    else:\n        smetrics.log_metric(\"path to code:\",notebook_path)\n        return(get_gcs_File,)\n\n"
+            ],
+            "image": "python:3.9"
+          }
+        },
+        "exec-data-transformation": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "data_transformation"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'numpy' 'sklearn' 'pandas' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'kfp==1.8.6' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef data_transformation(gcs_file: str, bucket_tranformed_data: str)->NamedTuple(\"Outputs\", [(\"train_data\", str),(\"test_data\", str)]):\n    \"\"\"This the Preprocessing functions checks for NA ,\n       drops them  and splits the dataset in to test train splits\n       Inputs: File path\n       Outputs: train and test datavser file paths\n       \"\"\"\n    import pandas as pd\n    from sklearn.model_selection import train_test_split\n\n    churn = pd.read_csv(gcs_file)\n    churn.dropna(inplace=True)\n    churn.reset_index(inplace=True, drop=True)\n    print(\"Dropped all the NAs\")\n    # Rename depvar to class as required by TPOT\n    churn.rename(columns={'event': 'class'}, inplace=True)\n    # Create depvar in separate data set.\n    churn_class = churn['class'].values\n    training_indices, testing_indices = train_test_split(churn.index,stratify = churn_class,\n                                                         train_size=0.75,test_size=0.25,\n                                                         random_state = 1114)\n    lifetime_enriched_train_rows_qp = churn.iloc[training_indices, :]\n    lifetime_enriched_test_rows_qp = churn.iloc[testing_indices, :]\n    train_data = f\"gs://{bucket_tranformed_data}/train.csv\"\n    test_data = f\"gs://{bucket_tranformed_data}/test.csv\"\n    lifetime_enriched_train_rows_qp.to_csv(train_data, index = False)\n    lifetime_enriched_test_rows_qp.to_csv(test_data, index = False)\n    return (train_data,test_data,)\n\n"
+            ],
+            "image": "python:3.9"
+          }
+        },
+        "exec-data-validation": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "data_validation"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'pandas' 'scipy' 'numpy' 'google-api-python-client' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'kfp==1.8.6' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef data_validation(gcs_file: str)-> NamedTuple(\"Outputs\", [(\"data_validation_sucess_output_flag\", bool)]):\n\n    import pandas as pd\n    import numpy as np\n    import pickle\n    from scipy import stats\n    from google.cloud import storage\n\n    '''\n    Inputs:\n    GCSFile : Entire path and name of the csv file of training data\n    generationNumber: Object generation number\n    timeStamp: Object generation timestamp\n\n    Function details:\n    This function is used to perform data validation to identify:\n    1. Outlier detection -\n    Use of Interquartile range rule to detect outliers and raise alerts.\n    2. Data schema matching -\n    Checking the data types of ingested data features with the respective \n    target data types.\n    3. Missing data check -\n    Check for missing data in the dataframe and raise alerts if missing\n    values are detected in the dataframe.\n    '''\n\n    # Read input ingested data\n    raw_data_in = pd.read_csv(gcs_file)\n    def outlier_detection(df):\n        df_numerical_cols = df.select_dtypes(include=['float64', 'int64'])\n        # Emulation of box plots\n        Q1 = df_numerical_cols.quantile(0.25)\n        Q3 = df_numerical_cols.quantile(0.75)\n        # Interquartile range  \n        IQR = Q3 - Q1\n        # print(IQR)\n        # Use Interquartile range rule to detect presence of outliers in the data\n        outlier_bool = (df_numerical_cols < (Q1 - 1.5 * IQR)) |(df_numerical_cols > (Q3 + 1.5 * IQR))\n        # print(outlier_bool)\n        # Curate the datapoint indices which are outliers\n        outlier_idx = list(np.where(np.array(outlier_bool.all(axis=1)) == True)[0])\n        # print(len(outlier_idx))\n        print(\"-\"*20)\n        print(\"Check 1: Outlier detection\")\n        # Raise alert if outliers are detected\n        if len(outlier_idx) != 0:\n            print(\" --- ALERT : Outliers detected in the dataset --- \")\n            print(\"Outliers are at the following index in the Dataframe: \")\n            print(outlier_idx)\n            outlier_detection_flag = False\n        else: \n            print(\"--- PASS : No outliers detected ---\")\n            outlier_detection_flag = True\n        print(\"-\"*20)\n        return outlier_detection_flag\n\n    def schema_check(df):\n        # Get the data type schema in the ingested data\n        trainData_schema = dict(df.dtypes)\n        # Load the target schema file\n        storage_client = storage.Client()\n        bucket = storage_client.bucket('mlops-data-validation')\n        blob = bucket.blob('data_schema.pickle')\n        pickle_in = blob.download_as_string()\n        target_schema = pickle.loads(pickle_in)\n        # Check if the ingested data feature data types match the target \n        # and raise alerts if they don't\n        print(\"Check 2: Data schema matching\")\n        if trainData_schema == target_schema:\n            print(\"--- PASS : Data types match the expected data types ---\")\n            schema_check_flag = True\n        else: \n            print(\"--- ALERT : Data types do not match the expected data types ---\")\n            schema_check_flag = False\n        print(\"-\"*20)\n        return schema_check_flag\n\n    def missing_val_check(df):    \n        # Check for NaN values/missing values\n        missing_val_list = np.asarray(df.isnull().any(axis=1))\n        # Find the indices of the datapoints where missing values are detected\n        missing_val_idx = list(np.where(missing_val_list == True)[0])\n        # Raise alerts if presence of missing values are detected\n        print(\"Check 3: Missing data check\")\n        if len(missing_val_idx) == 0: \n            print(\"--- PASS : No missing values detected ---\")\n            missing_val_flag = True\n        else: \n            print(\"--- ALERT : Missing values detected in the dataset ---\")\n            print(\"Missing values detected in the datapoints at the following indices:\",missing_val_idx)\n\n            # Calculate the percentage of datapoints/rows containing missing values\n            total_rows_df = df.shape[0]\n            rows_missing_vals_df = len(missing_val_idx)\n            missing_data_percent = round((rows_missing_vals_df/total_rows_df)*100, 2)\n            print(\"{} % of datapoints in the given data contain missing values.\".format(missing_data_percent))\n            missing_val_flag = False\n        print(\"-\"*20)\n        return missing_val_flag\n    # Check 1: Outlier detection\n    Oulier_flag = outlier_detection(raw_data_in)\n    # Check 2: Data schema matching\n    schema_flag = schema_check(raw_data_in)\n    # Check 3: Missing data check\n    missing_flag = missing_val_check(raw_data_in)\n\n    if Oulier_flag==False or schema_flag == False or missing_flag == False:\n        data_validation_suceess_flag = False\n    else:\n        data_validation_suceess_flag = True\n    return (data_validation_suceess_flag,)\n\n"
+            ],
+            "image": "python:3.9"
+          }
+        },
+        "exec-model-deployment": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "model_deployment"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'google-api-python-client' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'argparse' 'google-cloud-aiplatform==1.1.1' 'typing' 'kfp==1.8.6' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef model_deployment(model_path: str, flag: bool, PROJECT_ID: str, PROJECT_NUMBER: str, REGION: str, PIPELINE_NAME: str,\n                     metrics:Output[Metrics])-> NamedTuple(\"Outputs\", [(\"endpoint_name\", str)]):\n    '''\n       This function will upload the model to Vertex AI then deploy the model to endpoint, if endpoint doesn't exist\n       then it will create the endpoint and then deploy the model.\n       INPUTS: model_path - model path from model_E_V_R function\n               flag       - deployment decision\n       OUTPUTS: endpoint_name  - name of the endpoint\n    '''\n    from google.cloud.aiplatform import gapic as aip\n    from google.cloud import aiplatform\n    from typing import Dict, Optional\n    #from google.cloud import aiplatform_v1\n    project_id = PROJECT_ID\n    project_region = REGION\n    #gcs_bucket = model_path.split(\"/model.bst\")[0]\n    display_name = PIPELINE_NAME + model_path.split(\"/\")[-2]\n    saved_model_path = model_path.split(\"/model.bst\")[0]\n    serving_container_image_uri = 'us-docker.pkg.dev/vertex-ai/prediction/xgboost-cpu.1-4:latest'\n    PROJECT_NUMBER = PROJECT_NUMBER\n    flag=flag\n    #Function to upload model to Vertex AI\n    def upload_model(\n        project: str,\n        location: str,\n        display_name: str,\n        serving_container_image_uri: str,\n        artifact_uri: str,\n        sync: bool = True,):\n        aiplatform.init(project=project, location=location)\n        model = aiplatform.Model.upload(\n          display_name=display_name,\n          artifact_uri=artifact_uri,\n          serving_container_image_uri=serving_container_image_uri,\n          sync=sync,)\n        model.wait()\n        print(model.display_name)\n        print(model.resource_name)\n        return model\n    #Function to create endpoint\n    def create_endpoint(project_id: str, display_name: str, project_region: str, sync: bool = True,):\n        aiplatform.init(project=project_id, location=project_region)\n        endpoint = aiplatform.Endpoint.create(\n          display_name=display_name, project=project_id, location=project_region,)\n        print(endpoint.display_name)\n        print(endpoint.resource_name)\n        return endpoint\n    #Function to deploy a model\n    def deploy_model_with_dedicated_resources(\n        project: str,\n        location: str,\n        model_name: str,\n        machine_type: str,\n        PROJECT_NUMBER: str,\n        deployed_model_display_name: Optional[str] = None,\n        endpoint: Optional[aiplatform.Endpoint] = None,\n        traffic_split: Optional[Dict[str, int]] = None,\n        min_replica_count:int = 1,\n        max_replica_count:int = 1,\n        sync: bool = True,):\n        aiplatform.init(project=project, location=location)\n        model = aiplatform.Model(model_name=model_name)\n        model.deploy(\n            endpoint=endpoint,\n            deployed_model_display_name=deployed_model_display_name,\n            traffic_split={\"0\":100},\n            machine_type=machine_type,\n            min_replica_count=min_replica_count,\n            max_replica_count=max_replica_count,\n            sync=True,)\n        model.wait()\n        print(model.display_name)\n        print(model.resource_name)\n        return model\n    #Uploading validated model to Vertex AI\n    model=upload_model(\n        project_id,project_region,display_name,serving_container_image_uri,saved_model_path)\n    model_name=model.resource_name\n    aiplatform.init(project=project_id, location=project_region)\n    api_endpoint = f\"{project_region}-aiplatform.googleapis.com\"  # @param {type:\"string\"}\n    client_options = {\"api_endpoint\": api_endpoint}\n    client = aip.EndpointServiceClient(client_options=client_options)\n    endpoints_all = client.list_endpoints(parent=f'projects/{PROJECT_NUMBER}/locations/{project_region}')\n    #endpoint_id = ''\n    endpoint_exists = False\n    #deployed_model = ''\n    #endpoint_name = display_name\n    for oneEnd in endpoints_all:\n        if oneEnd.display_name == display_name:\n            print(oneEnd.display_name)\n            print(oneEnd.name)\n            endpoint_exists = True\n            endpoint_id = oneEnd.name\n            for oneModel in oneEnd.deployed_models:\n                print(oneModel.model)\n                deployed_model_id = oneModel.model.split('/')[-1]\n                deployed_model = oneModel.model\n    if flag == True and endpoint_exists == True:\n        aiplatform.init(project=project_id, location=project_region)\n        endpoint1=aiplatform.Endpoint(endpoint_name=endpoint_id, project= project_id, location= project_region,)\n        endpoint1.undeploy_all()\n        endpoint_name = endpoint_id\n        deploy_model_with_dedicated_resources(\n            project=project_id,\n            location=project_region,\n            model_name=model_name,\n            machine_type='n1-standard-4',\n            PROJECT_NUMBER=PROJECT_NUMBER,\n            deployed_model_display_name=display_name,\n            endpoint = endpoint1,\n            traffic_split={\"0\":100},\n            min_replica_count = 1,\n            max_replica_count = 1,\n            sync= True,\n        )\n        metrics.log_metric(\"previously-deployed-model\",deployed_model)\n        metrics.log_metric(\"newly-deployed-model\",model_name)\n        metrics.log_metric(\"current-model\",model_name)\n        metrics.log_metric(\"endpoint\", endpoint_name)\n    elif flag == True and endpoint_exists == False:\n        #Creating endpoint\n        endpoint=create_endpoint(project_id, display_name, project_region)\n        endpoint_name=endpoint.resource_name \n        #Deploying Validated model to endpoint\n        deploy_model_with_dedicated_resources(\n            project=project_id,\n            location=project_region,\n            model_name=model_name,\n            machine_type='n1-standard-4',\n            PROJECT_NUMBER=PROJECT_NUMBER,\n            deployed_model_display_name=display_name,\n            endpoint = endpoint,\n            traffic_split={\"0\":100},\n            min_replica_count = 1,\n            max_replica_count = 1,\n            sync= True,\n        )\n        metrics.log_metric(\"previously-deployed-model\",\"no model deployed yet\")\n        metrics.log_metric(\"newly-deployed-model\",model_name)\n        metrics.log_metric(\"current-model\",model_name)\n        metrics.log_metric(\"endpoint\", endpoint_name)\n    elif flag == False and endpoint_exists == True:\n        endpoint_name = endpoint_id\n        metrics.log_metric(\"previously-deployed-model\",deployed_model)\n        metrics.log_metric(\"newly-deployed-model\",\"not-deployed\")\n        metrics.log_metric(\"current-model\",model_name)\n        metrics.log_metric(\"endpoint\", endpoint_name)\n    elif flag == False and endpoint_exists == False:\n        endpoint_name = 'none'\n        metrics.log_metric(\"previously-deployed-model\",\"no model deployed yet\")\n        metrics.log_metric(\"newly-deployed-model\",\"not-deployed\")\n        metrics.log_metric(\"current-model\",model_name)\n        metrics.log_metric(\"endpoint\", endpoint_name)\n    return (endpoint_name, )\n\n"
+            ],
+            "image": "python:3.9"
+          }
+        },
+        "exec-model-e-v-r": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "model_E_V_R"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'sklearn' 'pandas' 'google-api-python-client' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'argparse' 'google-cloud-aiplatform==1.1.1' 'xgboost' 'numpyencoder' 'kfp==1.8.6' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef model_E_V_R(model:Input[Model],MODEL_BUCKET_NAME: str, BUCKET_NAME_THRESHOLD: str, BUCKET_NAME_TESTING: str,\n                metrics:Output[Metrics])-> NamedTuple(\"Outputs\", [(\"check\", bool),(\"new_model_path\",str)]):\n    \"\"\"\n       This function is for getting predictions and F1-score from new model and then validating the model by comparing\n       it to previously validated model and then saving model metadata to Vertex AI Metadata service.\n       Inputs: model                  - recently trained model\n               MODEL_BUCKET_NAME      - bucket where recently trained model is saved as model.bst\n               BUCKET_NAME_THRESHOLD  - bucket containing F1 score of deployed model\n               BUCKET_NAME_TESTING    - path to latest test data which is in a gcs bucket\n       Outputs: flag            -  deployment decision for the model\n                new_model_path  -  path to current model saved in GCS bucket\n    \"\"\"\n    import argparse\n    import numpy as np\n    import pandas as pd\n    import os\n    from sklearn.metrics import f1_score\n    from google.cloud import aiplatform\n    import json\n    from google.cloud import storage\n    import gcsfs\n    from numpyencoder import NumpyEncoder\n    from xgboost import XGBClassifier\n    #Getting model path\n    model_path =model.uri\n    #Getting Test Data\n    new_test_data = pd.read_csv(BUCKET_NAME_TESTING)\n    x_test_data=new_test_data.drop('class',axis=1)\n    y_test_data=new_test_data['class']\n    #Getting trained model\n    storage_client = storage.Client()\n    bucket = storage_client.get_bucket(model_path.split(\"/\")[2])\n    blob_name = model_path.split('/')[3:]\n    blob_name = \"/\".join(blob_name)+'.bst'\n    blob = bucket.blob(blob_name)\n    model_name = model_path.split(\"/\")[-1]\n    model_name = model_name+'.bst'\n    blob.download_to_filename(model_name)\n    model3 = XGBClassifier()\n    model3.load_model(model_name)\n    #Getting the predictions\n    y_pred = model3.predict(x_test_data)\n    model_metrics=f1_score(y_test_data,y_pred,average=None)\n    #Saving model metrics in a Dictionary\n    model_metrics_avg=(model_metrics[0]+model_metrics[1])/2\n    model_metric_dict = {}\n    model_metric_dict['F1-score'] = model_metrics_avg\n    #Getting object names from BUCKET_NAME_THRESHOLD\n    storage_client = storage.Client()\n    bucket = storage_client.get_bucket(BUCKET_NAME_THRESHOLD)\n    blobs = storage_client.list_blobs(BUCKET_NAME_THRESHOLD)\n    bucket_object_names=''\n    #initiallizing flag variable which will we used to identify which model to deploy\n    flag = False\n    for blob in blobs:\n        bucket_object_names=bucket_object_names+'/'+blob.name\n\n    #Checking if BUCKET_NAME_THRESHOLD is empty or not\n    #If it's empty then pipeline is running for first time\n    if bucket_object_names=='':\n        #Checking if F1 score is greater than 0.6\n        if model_metrics_avg>0.6:\n            flag = True\n            json_file_name = \"model.json\"\n            #Saving metric Dictionary in json file\n            with open(json_file_name, 'w') as file:\n                json.dump(model_metric_dict, file, cls=NumpyEncoder)\n            #Saving json file to GCS bucket\n            storage_client = storage.Client()\n            bucket = storage_client.bucket(BUCKET_NAME_THRESHOLD)\n            bucket.blob(json_file_name).upload_from_filename(json_file_name)\n            #Saving model to GCS bucket \n            storage_client = storage.Client()\n            bucket = storage_client.bucket(MODEL_BUCKET_NAME)\n            bucket.blob('model.bst').upload_from_filename(model_name)\n            new_model_path = 'gs://'+MODEL_BUCKET_NAME+'/model.bst'\n            #Saving metadata in Vertex AI metadata service\n            metrics.log_metric(\"new-model-F1-Score-avg\",model_metrics_avg)\n            metrics.log_metric(\"deployed-model-F1-Score-avg\",\"no model deployed yet\")\n            #metrics.log_metric(\"newly-uploaded-model\",model_name)\n            metrics.log_metric(\"deployment-status\",\"true\")\n            metrics.log_metric(\"framework\", \"XGB Classifier\")\n            metrics.log_metric(\"dataset_size\", len(new_test_data))\n        else:\n            flag = False\n            #Saving model to GCS bucket \n            storage_client = storage.Client()\n            bucket = storage_client.bucket(MODEL_BUCKET_NAME)\n            bucket.blob('model.bst').upload_from_filename(model_name)\n            new_model_path = 'gs://'+MODEL_BUCKET_NAME+'/model.bst'\n            #Saving metadata in Vertex AI metadata service\n            metrics.log_metric(\"new-model-F1-Score-avg\",model_metrics_avg)\n            metrics.log_metric(\"deployed-model-F1-Score-avg\",\"no model deployed yet\")\n            #metrics.log_metric(\"newly-uploaded-model\",model_name)\n            metrics.log_metric(\"deployment-status\",\"false\")\n            metrics.log_metric(\"framework\", \"XGB Classifier\")\n            metrics.log_metric(\"dataset_size\", len(new_test_data))\n\n    else:\n        #Getting model.json file from 'BUCKET_NAME_THRESHOLD' bucket\n        storage_client = storage.Client()\n        bucket = storage_client.get_bucket(BUCKET_NAME_THRESHOLD)\n        blob = bucket.blob('model.json')\n        # Download the contents of the blob as a string and then parse it using json.loads() method\n        data = json.loads(blob.download_as_string(client=None))\n        print(data)\n        print(type(data))\n        print(list(data.values())[0])\n        deployed_model_threshold = list(data.values())[0]\n\n        #Checking if F1-score of new model is greater or smaller than Deployed model's F1-score  \n        if  model_metrics_avg < deployed_model_threshold:\n            #F1-score is smaller so new_model will not be deployed\n            flag = False\n            #Saving Validated model to GCS bucket \n            storage_client = storage.Client()\n            bucket = storage_client.bucket(MODEL_BUCKET_NAME)\n            bucket.blob('model.bst').upload_from_filename(model_name)\n            new_model_path = 'gs://'+MODEL_BUCKET_NAME+'/model.bst'\n            #Saving metadata in Vertex AI metadata service\n             #new_model_path = 'gs://'+MODEL_BUCKET_NAME+'/model.bst'\n            metrics.log_metric(\"new-model-F1-Score-avg\",model_metrics_avg)\n            metrics.log_metric(\"deployed-model-F1-Score-avg\",deployed_model_threshold)\n            #metrics.log_metric(\"newly-uploaded-model\",model_name)\n            metrics.log_metric(\"deployment-status\",\"false\")\n            metrics.log_metric(\"framework\", \"XGB Classifier\")\n            metrics.log_metric(\"dataset_size\", len(new_test_data))\n\n        else:\n            #F1-score is greater so new_model will be deployed\n            flag = True\n            json_Filename = \"model.json\"\n            #Updating metric json file with new F1-score\n            with open(json_Filename, 'w') as file:  \n                json.dump(model_metric_dict, file, cls=NumpyEncoder)\n            bucket.blob(json_Filename).upload_from_filename(json_Filename)\n            #Saving Validated model to GCS bucket \n            storage_client = storage.Client()\n            bucket = storage_client.bucket(MODEL_BUCKET_NAME)\n            bucket.blob('model.bst').upload_from_filename(model_name)\n            new_model_path = 'gs://'+MODEL_BUCKET_NAME+'/model.bst'\n            #Saving metadata in Vertex AI metadata service\n            metrics.log_metric(\"new-model-F1-Score-avg\",model_metrics_avg)\n            metrics.log_metric(\"deployed-model-F1-Score-avg\",deployed_model_threshold)\n            #metrics.log_metric(\"newly-uploaded-model\",model_name)\n            metrics.log_metric(\"deployment-status\",\"true\")\n            metrics.log_metric(\"framework\", \"XGB Classifier\")\n            metrics.log_metric(\"dataset_size\", len(new_test_data))\n\n    return (flag,new_model_path,)\n\n"
+            ],
+            "image": "python:3.9"
+          }
+        },
+        "exec-model-evaluation-vizier": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "model_evaluation_vizier"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'sklearn' 'pandas' 'google-api-python-client' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'argparse' 'google-cloud-aiplatform==1.1.1' 'xgboost' 'numpyencoder' 'kfp==1.8.6' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef model_evaluation_vizier(model:Input[Model],MODEL_BUCKET_NAME: str, BUCKET_NAME_THRESHOLD: str, BUCKET_NAME_TESTING: str,metrics: Output[Metrics])-> NamedTuple(\"Outputs\", [(\"check\", bool),(\"new_model_path\",str)]):\n    '''\n          This function make predictions from vizier model and calculate F1 score\n          INPUTS : model path, latest test data\n          OUTPUTS : none\n    '''\n    import argparse\n    import numpy as np\n    import pandas as pd\n    import os\n    from sklearn.metrics import f1_score\n    from google.cloud import aiplatform\n    import json\n    from google.cloud import storage\n    import gcsfs\n    import pickle\n    from numpyencoder import NumpyEncoder\n    from xgboost import XGBClassifier\n\n    model_path = model.uri\n    new_test_data = pd.read_csv(BUCKET_NAME_TESTING)\n    x_test_data=new_test_data.drop('class',axis=1)\n    y_test_data=new_test_data['class']\n    storage_client = storage.Client()\n    bucket = storage_client.get_bucket(model_path.split(\"/\")[2])\n    blob_name = model_path.split('/')[3:]\n    blob_name = \"/\".join(blob_name)+'.bst'\n    blob = bucket.blob(blob_name)\n    blob.download_to_filename(\"model_sklearn_viz.bst\")\n    model3 = XGBClassifier()\n    model3.load_model('model_sklearn_viz.bst')\n    model_name = 'model_sklearn_viz.bst'\n    y_pred = model3.predict(x_test_data)\n    model_metrics=f1_score(y_test_data,y_pred,average=None)\n    metrics.log_metric(\"F1-Score_0\",model_metrics[0])\n    metrics.log_metric(\"F1-Score_1\",model_metrics[1])\n    metrics.log_metric(\"framework\", \"XGB Classifier\")\n    metrics.log_metric(\"dataset_size\", len(new_test_data))\n\n    return None\n\n"
+            ],
+            "image": "python:3.9"
+          }
+        },
+        "exec-model-training": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "model_training"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'numpy' 'sklearn' 'pandas' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'xgboost' 'hyperopt' 'kfp==1.8.6' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef model_training(tuned_hp: str, trainfile: str, model:Output[Model]):\n    #-> NamedTuple(\"Outputs\", [(\"model_path\", str)]):\n    \"\"\"This function uses the hyper-parameters using hyperopt\n       and trains a XGBClassifier for churn prediction\n       Inputs: Json contains hyperparametrs, train file path\n       Output: file path of saved model\n    \"\"\"\n    from xgboost import XGBClassifier\n    from google.cloud import storage\n    import pandas as pd\n    import gcsfs\n    import json\n    # Get best model in a dict format.\n    train = pd.read_csv(trainfile)\n    train_features = train.drop(['class'], axis=1)\n    train_target = train['class']\n    file_system = gcsfs.GCSFileSystem()\n    best_model = json.load(file_system.open(tuned_hp, 'rb'))\n    # Create the pipeline and set hyperparameters.\n    exported_pipeline = XGBClassifier(eta=best_model.get('eta'),\n                                      gamma=best_model.get('gamma'),\n                                      colsample_bylevel=best_model.get('colsample_bylevel'),\n                                      colsample_bytree=best_model.get('colsample_bytree'),\n                                      eval_metric=best_model.get('eval_metric'),\n                                      learning_rate=best_model.get('learning_rate'),\n                                      max_depth=best_model.get('max_depth'),\n                                      min_child_weight=best_model.get('min_child_rate'),\n                                      n_estimators=best_model.get('n_estimators'),\n                                      n_jobs=-1,\n                                      booster=best_model.get('booster'),\n                                      subsample=best_model.get('subsample'),\n                                      tree_method=best_model.get('tree_method'),\n                                      verbosity=0,\n                                      use_label_encoder = False,\n                                      early_stopping_rounds=10)\n    # Fix random state in exported estimator\n    if hasattr(exported_pipeline, 'random_state'):\n        setattr(exported_pipeline, 'random_state', 1114)\n    # Fit model\n    exported_pipeline.fit(train_features, train_target)\n    print(\"Training Sucessfully Completed\")\n    #dumping the model to gcs bucket.\n    exported_pipeline.save_model(\"model_sklearn.bst\")\n    exported_pipeline.save_model(model.path+\".bst\")\n\n"
+            ],
+            "image": "python:3.9"
+          }
+        },
+        "exec-model-training-vizier": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "model_training_vizier"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'numpy' 'sklearn' 'pandas' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'xgboost' 'hyperopt' 'kfp==1.8.6' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef model_training_vizier(tuned_hp: str, trainfile: str,model:Output[Model]):\n    #-> NamedTuple(\"Outputs\", [(\"model_path\", str)]):\n    \"\"\"This function uses the hyper-parameters using vizier\n       and trains a XGBClassifier for churn prediction\n       Inputs: Json contains hyperparametrs, train file path\n       Output: file path of saved model\n    \"\"\"\n    from xgboost import XGBClassifier\n    import pandas as pd\n    from hyperopt import hp, fmin, tpe, rand, STATUS_OK, Trials\n    from sklearn.model_selection import KFold\n    from sklearn.model_selection import cross_val_score\n    from sklearn.model_selection import GridSearchCV\n    from sklearn.model_selection import RandomizedSearchCV\n    from sklearn.model_selection import RepeatedStratifiedKFold\n    from sklearn.metrics import classification_report\n    import time\n    import numpy as np\n    import pickle\n    from hyperopt import space_eval\n    from hyperopt import Trials\n    from google.cloud import storage\n    import gcsfs\n    import json\n    # Set up the XGBoost version\n    # Declare xgboost search space for Hyperopt\n    # Get best model in a dict format.\n    train = pd.read_csv(trainfile)\n    train_features = train.drop(['class'], axis=1)\n    train_target = train['class']\n    file_system = gcsfs.GCSFileSystem()\n    best_model = json.load(file_system.open(tuned_hp, 'rb'))\n    # Create the pipeline and set hyperparameters.\n    exported_pipeline = XGBClassifier(eta=best_model.get('eta'), \n                                      gamma=best_model.get('gamma'),\n                                      colsample_bylevel=best_model.get('colsample_bylevel'),\n                                      colsample_bytree=best_model.get('colsample_bytree'),\n                                      eval_metric=best_model.get('eval_metric'),\n                                      learning_rate=best_model.get('learning_rate'), \n                                      max_depth=int(best_model.get('max_depth')), \n                                      min_child_weight=best_model.get('min_child_rate'), \n                                      n_estimators=int(best_model.get('n_estimators')), \n                                      n_jobs=-1, \n                                      booster=best_model.get('booster'),\n                                      subsample=best_model.get('subsample'), \n                                      tree_method=best_model.get('tree_method'), \n                                      verbosity=0,\n                                      use_label_encoder = False,\n                                      early_stopping_rounds=10)\n    # Fix random state in exported estimator\n    if hasattr(exported_pipeline, 'random_state'):\n        setattr(exported_pipeline, 'random_state', 1114)\n    # Fit model\n    exported_pipeline.fit(train_features, train_target)\n    print(\"Training Sucessfully Completed\")\n    #dumping the model to gcs bucket.\n    exported_pipeline.save_model(\"model_sklearn_viz.bst\")\n    exported_pipeline.save_model(model.path+\".bst\")\n\n"
+            ],
+            "image": "python:3.9"
+          }
+        },
+        "exec-model-tuning": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "model_tuning"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'numpy' 'sklearn' 'pandas' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'xgboost' 'hyperopt' 'numpyencoder' 'kfp==1.8.6' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef model_tuning(train_file: str, bucket_name_model: str,smetrics: Output[Metrics])-> NamedTuple(\"Outputs\", [(\"tuned_hp\", str)]):  \n    \"\"\" This function search for best hyperparameters for XGBClassifier\n        using hyperopt.\n        Inputs:Train file path, Bucket to save hyperprameters Json\n        Outputs: Json path(Hyper parametrs)\n    \"\"\"\n    from xgboost import XGBClassifier\n    import pandas as pd\n    from hyperopt import hp, fmin, tpe, rand, STATUS_OK, Trials\n    from sklearn.model_selection import KFold\n    from sklearn.model_selection import cross_val_score\n    from sklearn.model_selection import RepeatedStratifiedKFold\n    import time\n    import numpy as np\n    from hyperopt import space_eval\n    from hyperopt import Trials\n    from google.cloud import storage\n    import json\n    from numpyencoder import NumpyEncoder\n    # Set up the XGBoost version\n    # Declare xgboost search space for Hyperopt\n    start= time.time()\n    train = pd.read_csv(train_file)\n    train_features = train.drop(['class'], axis=1)\n    train_target = train['class']\n    #best_score =1\n    xgboost_space={'max_depth': hp.choice('x_max_depth',[2,3,4,5,6,7,8]),\n                   'min_child_weight':hp.choice('x_min_child_weight',\n                                                np.round(np.arange(0.0,0.2,0.01),5)),\n                   'learning_rate':hp.choice('x_learning_rate',\n                                             np.round(np.arange(0.005,0.3,0.01),5)),\n                   'subsample':hp.choice('x_subsample',\n                                         np.round(np.arange(0.1,1.0,0.05),5)),\n                   'colsample_bylevel':hp.choice('x_colsample_bylevel',\n                                                 np.round(np.arange(0.1,1.0,0.05),5)),\n                   'colsample_bytree':hp.choice('x_colsample_bytree',\n                                                np.round(np.arange(0.1,1.0,0.05),5)),\n                   'n_estimators':hp.choice('x_n_estimators',np.arange(25,100,5)),\n                   'gamma': hp.quniform('gamma', 0.5, 1, 0.05),\n                   'eta': hp.quniform('eta', 0.025, 0.5, 0.025),\n                   'booster': 'gbtree',\n                   'tree_method': 'hist',\n                   'eval_metric': 'logloss'}\n    def objective(space):\n        #global best_score\n        best_score = 1\n        model = XGBClassifier(**space, n_jobs=-1, use_label_encoder=False)\n        kfold = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=1114)\n        score = -cross_val_score(model,train_features,train_target,\n                                 cv=kfold,\n                                 scoring='neg_log_loss',\n                                 verbose=False).mean()\n        if (score < best_score):\n            best_score = score\n        return score\n    start = time.time()\n    trials = Trials()\n    best = fmin(objective,space = xgboost_space, algo = tpe.suggest,max_evals = 50,trials = trials)\n    print(\"Hyperopt search took %.2f seconds for 100 candidates\" % ((time.time() - start)))\n    tuned_hp_dict= space_eval(xgboost_space, best)\n    print(tuned_hp_dict)\n    json_file_name = \"hptuned.json\"   \n    with open(json_file_name, 'w') as file:  \n        json.dump(tuned_hp_dict, file, cls=NumpyEncoder)\n    storage_client = storage.Client()\n    bucket = storage_client.bucket(bucket_name_model)\n    bucket.blob('tuned_hp/'+json_file_name).upload_from_filename(json_file_name)\n    file_path= f\"gs://{bucket_name_model}/tuned_hp/hptuned.json\"\n    end= time.time()\n    smetrics.log_metric(\"max_depth\",float(tuned_hp_dict['max_depth']))\n    smetrics.log_metric(\"n_estimators\",float(tuned_hp_dict['n_estimators']))\n    smetrics.log_metric(\"learning_rate\",float(tuned_hp_dict['learning_rate']))\n    smetrics.log_metric(\"time taken for 50 trials\", (end-start))\n    return (file_path,)\n\n"
+            ],
+            "image": "python:3.9"
+          }
+        },
+        "exec-model-tuning-vizier": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "model_tuning_vizier"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'numpy' 'sklearn' 'pandas' 'dvc' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'google-api-python-client' 'xgboost' 'google-cloud-aiplatform' 'typing' 'numpyencoder' 'kfp==1.8.6' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef model_tuning_vizier(trainfile: str, bucket_name_model: str, region: str, project_id: str, smetrics: Output[Metrics])-> NamedTuple(\"Outputs\", [(\"tuned_hp\", str)]):\n    \"\"\" This function search for best hyperparameters for XGBClassifier\n        using vertex vizier.\n        Inputs:Train file path, Bucket to save hyperprameters Json\n        Outputs: Json path(Hyper parametrs)\n    \"\"\"\n    from google.cloud.aiplatform_v1beta1 import VizierServiceClient\n    from typing import List, Dict\n    import pandas as pd\n    import datetime\n    import json\n    import proto\n    import time\n    import numpy as np\n    from xgboost import XGBClassifier\n    from google.cloud import storage\n    from numpyencoder import NumpyEncoder\n    from sklearn.model_selection import train_test_split\n    from sklearn.metrics import log_loss\n\n    region = region\n    project_id = project_id\n    start= time.time()\n    def create_study(parameters: List[Dict],\n                     metrics: List[Dict],\n                     vizier_client,\n                     project_id: str,\n                     location: str):\n        parent = f\"projects/{project_id}/locations/{location}\"\n        display_name = \"{}_study_{}\".format(project_id.replace(\"-\", \"\"),\n                                            datetime.datetime.now().strftime(\"%Y%m%d_%H%M%S\"))\n        \"\"\"ALGORITHM_UNSPECIFIED' means Bayesian optimization\n           can also be 'GRID_SEARCH' or 'RANDOM_SEARCH\n        \"\"\"\n        study = {'display_name': display_name,\n                 'study_spec': {'algorithm': 'ALGORITHM_UNSPECIFIED',\n                                'parameters': parameters,\n                                'metrics': metrics}}\n        study = vizier_client.create_study(parent=parent, study=study)\n        return study.name\n\n    def params_to_dict(parameters):\n        return {p.parameter_id: p.value for p in parameters}\n\n    def run_study(metric_fn,\n                  requests: int,\n                  suggestions_per_request: int,\n                  client_id: str,\n                  study_id: str,\n                  vizier_client):\n        for k in range(requests):\n            suggest_response = vizier_client.suggest_trials({\"parent\": study_id,\n                                                             \"suggestion_count\": suggestions_per_request,\n                                                             \"client_id\": client_id})\n            print(f\"Request {k}\")\n            for suggested_trial in suggest_response.result().trials:\n                suggested_params = params_to_dict(suggested_trial.parameters)\n                metric = metric_fn(suggested_params)\n                print(\"Trial Results\", metric)\n                vizier_client.add_trial_measurement({'trial_name':suggested_trial.name,\n                                                     'measurement': {'metrics': [metric]}})\n                response = vizier_client.complete_trial({\"name\": suggested_trial.name,\n                                                         \"trial_infeasible\": False})\n\n    def get_optimal_trials(study_id, vizier_client):\n        optimal_trials = vizier_client.list_optimal_trials({'parent': study_id})\n        optimal_params = []\n        for trial in proto.Message.to_dict(optimal_trials)['optimal_trials']:\n            optimal_params.append({p['parameter_id']: p['value'] for p in trial['parameters']})\n        return optimal_params\n\n    #discrete_value_spec, integer_value_spec, double_value_spec\n    def get_params():\n        parameters = [{'parameter_id':'max_depth',\n                       'integer_value_spec':{'min_value':2,'max_value':8}},\n                      {'parameter_id':'min_child_weight',\n                       'discrete_value_spec':{'values':np.arange(0.01,0.2,0.01)}},\n                      {'parameter_id':'learning_rate',\n                       'double_value_spec':{'min_value':0.005,'max_value':0.3}},\n                      {'parameter_id':'subsample',\n                       'discrete_value_spec':{'values':np.arange(0.1,1,0.1)}},\n                      {'parameter_id':'colsample_bylevel',\n                       'discrete_value_spec':{'values':np.arange(0.1,1,0.1)}},\n                      {'parameter_id':'colsample_bytree',\n                       'discrete_value_spec':{'values':np.arange(0.1,1,0.1)}},\n                      {'parameter_id':'n_estimators',\n                       'integer_value_spec':{'min_value':25,'max_value':100}},\n                      {'parameter_id':'gamma',\n                       'discrete_value_spec':{'values':np.arange(0.5,1,0.1)}},\n                      {'parameter_id':'eta',\n                       'double_value_spec':{'min_value':0.025,'max_value':0.5}}]\n        return parameters\n\n    parameters = get_params()\n    end_point = region + \"-aiplatform.googleapis.com\"\n    vizier_client = VizierServiceClient(client_options=dict(api_endpoint=end_point))\n\n    def metric_fn(params):\n        max_depth = int(params['max_depth'])\n        min_child_weight = float(params['min_child_weight'])\n        learning_rate = float(params['learning_rate'])\n        subsample = float(params['subsample'])\n        colsample_bylevel = float(params['colsample_bylevel'])\n        colsample_bytree = float(params['colsample_bytree'])\n        n_estimators = int(params['n_estimators'])\n        gamma = float(params['gamma'])\n        eta = float(params['eta'])\n        df_train = pd.read_csv(trainfile)\n        adt_df_new = df_train.copy()\n        train_no_taget = adt_df_new.drop(['class'], axis=1)\n        train_target = adt_df_new['class']\n        x_train, x_test, y_train, y_test = train_test_split(train_no_taget,train_target,\n                                                            train_size = 0.75,\n                                                            test_size=0.25, random_state=1)\n           # \"\"\"Train the model using XGBRegressor.\"\"\"\n        model = XGBClassifier(max_depth=max_depth,\n                              min_child_weight=min_child_weight,\n                              learning_rate=learning_rate,\n                              subsample=subsample,\n                              colsample_bylevel=colsample_bylevel,\n                              colsample_bytree=colsample_bytree,\n                              n_estimators=n_estimators,\n                              gamma=gamma,\n                              eta=eta,                       \n                              eval_metric= 'logloss',\n                              n_jobs=-1,\n                              booster= 'gbtree',\n                              tree_method= 'hist',\n                              verbosity=0,\n                              use_label_encoder=False,\n                              random_state=124)\n        model.fit(x_train,y_train)\n        #predictions= model.predict(X_train)\n        loss= float(log_loss(y_test, model.predict_proba(x_test)))\n        #print('log loss value is:'+ str(r2_scor))\n        return {'value': loss}\n\n    metrics = [{'metric_id': 'log_loss',  # the name of the quantity we want to minimize\n                'goal': 'MINIMIZE',  # choose MINIMIZE or MAXIMIZE\n               }]\n    # Call a helper function to create the study\n    study_id = create_study(location = region,\n                            parameters=parameters,\n                            metrics=metrics,\n                            vizier_client=vizier_client,\n                            project_id=project_id)\n    run_study(metric_fn,\n              requests=10,\n              # set >1 to get suggestions \"in parallel\", good for distributed training\n              suggestions_per_request=5,\n              # keep the name the same to resume a trial\n              client_id=\"client_1\",\n              study_id=study_id,\n              vizier_client=vizier_client,)\n    params = get_optimal_trials(study_id, vizier_client)[0]\n    print(params)\n    max_depth = int(params['max_depth'])\n    learning_rate = round(float(params['learning_rate']),2)\n    n_estimators = int(params['n_estimators'])\n    smetrics.log_metric(\"max_depth\", max_depth)\n    smetrics.log_metric(\"learning_rate\", learning_rate)\n    smetrics.log_metric(\"n_estimator\", n_estimators)\n    json_filename = \"hptuned_vizier.json\"\n    with open(json_filename, 'w') as file:\n        json.dump(params, file, cls=NumpyEncoder)\n    storage_client = storage.Client()\n    bucket = storage_client.bucket(bucket_name_model)\n    bucket.blob('vizier_model_hp/'+json_filename).upload_from_filename(json_filename)\n    file_path= f\"gs://{bucket_name_model}/vizier_model_hp/hptuned_vizier.json\"\n    end= time.time()\n    smetrics.log_metric(\"time taken for 50 trials\", (end-start))\n    return (file_path,)\n\n"
+            ],
+            "image": "python:3.9"
+          }
+        }
+      }
+    },
+    "pipelineInfo": {
+      "name": "mlops-customer-churn-pilot"
+    },
+    "root": {
+      "dag": {
+        "outputs": {
+          "artifacts": {
+            "auto-ml-exp-smetrics": {
+              "artifactSelectors": [
+                {
+                  "outputArtifactKey": "auto-ml-exp-smetrics",
+                  "producerSubtask": "condition-data-validation-success-check-1"
+                }
+              ]
+            },
+            "data-ingestion-smetrics": {
+              "artifactSelectors": [
+                {
+                  "outputArtifactKey": "smetrics",
+                  "producerSubtask": "data-ingestion"
+                }
+              ]
+            },
+            "model-deployment-metrics": {
+              "artifactSelectors": [
+                {
+                  "outputArtifactKey": "model-deployment-metrics",
+                  "producerSubtask": "condition-data-validation-success-check-1"
+                }
+              ]
+            },
+            "model-e-v-r-metrics": {
+              "artifactSelectors": [
+                {
+                  "outputArtifactKey": "model-e-v-r-metrics",
+                  "producerSubtask": "condition-data-validation-success-check-1"
+                }
+              ]
+            },
+            "model-evaluation-vizier-metrics": {
+              "artifactSelectors": [
+                {
+                  "outputArtifactKey": "model-evaluation-vizier-metrics",
+                  "producerSubtask": "condition-data-validation-success-check-1"
+                }
+              ]
+            },
+            "model-tuning-smetrics": {
+              "artifactSelectors": [
+                {
+                  "outputArtifactKey": "model-tuning-smetrics",
+                  "producerSubtask": "condition-data-validation-success-check-1"
+                }
+              ]
+            },
+            "model-tuning-vizier-smetrics": {
+              "artifactSelectors": [
+                {
+                  "outputArtifactKey": "model-tuning-vizier-smetrics",
+                  "producerSubtask": "condition-data-validation-success-check-1"
+                }
+              ]
+            }
+          }
+        },
+        "tasks": {
+          "condition-data-validation-success-check-1": {
+            "componentRef": {
+              "name": "comp-condition-data-validation-success-check-1"
+            },
+            "dependentTasks": [
+              "data-ingestion",
+              "data-validation"
+            ],
+            "inputs": {
+              "parameters": {
+                "pipelineparam--data-ingestion-gcsFile": {
+                  "taskOutputParameter": {
+                    "outputParameterKey": "gcsFile",
+                    "producerTask": "data-ingestion"
+                  }
+                },
+                "pipelineparam--data-validation-data_validation_sucess_output_flag": {
+                  "taskOutputParameter": {
+                    "outputParameterKey": "data_validation_sucess_output_flag",
+                    "producerTask": "data-validation"
+                  }
+                }
+              }
+            },
+            "taskInfo": {
+              "name": "condition-data-validation-success-check-1"
+            },
+            "triggerPolicy": {
+              "condition": "inputs.parameters['pipelineparam--data-validation-data_validation_sucess_output_flag'].string_value == 'true'"
+            }
+          },
+          "data-ingestion": {
+            "cachingOptions": {
+              "enableCache": true
+            },
+            "componentRef": {
+              "name": "comp-data-ingestion"
+            },
+            "inputs": {
+              "parameters": {
+                "bucket_name": {
+                  "runtimeValue": {
+                    "constantValue": {
+                      "stringValue": "mlops-data-versioning"
+                    }
+                  }
+                },
+                "notebook_path": {
+                  "runtimeValue": {
+                    "constantValue": {
+                      "stringValue": "NA"
+                    }
+                  }
+                }
+              }
+            },
+            "taskInfo": {
+              "name": "data-ingestion"
+            }
+          },
+          "data-validation": {
+            "cachingOptions": {
+              "enableCache": true
+            },
+            "componentRef": {
+              "name": "comp-data-validation"
+            },
+            "dependentTasks": [
+              "data-ingestion"
+            ],
+            "inputs": {
+              "parameters": {
+                "gcs_file": {
+                  "taskOutputParameter": {
+                    "outputParameterKey": "gcsFile",
+                    "producerTask": "data-ingestion"
+                  }
+                }
+              }
+            },
+            "taskInfo": {
+              "name": "data-validation"
+            }
+          }
+        }
+      },
+      "outputDefinitions": {
+        "artifacts": {
+          "auto-ml-exp-smetrics": {
+            "artifactType": {
+              "schemaTitle": "system.Metrics",
+              "schemaVersion": "0.0.1"
+            }
+          },
+          "data-ingestion-smetrics": {
+            "artifactType": {
+              "schemaTitle": "system.Metrics",
+              "schemaVersion": "0.0.1"
+            }
+          },
+          "model-deployment-metrics": {
+            "artifactType": {
+              "schemaTitle": "system.Metrics",
+              "schemaVersion": "0.0.1"
+            }
+          },
+          "model-e-v-r-metrics": {
+            "artifactType": {
+              "schemaTitle": "system.Metrics",
+              "schemaVersion": "0.0.1"
+            }
+          },
+          "model-evaluation-vizier-metrics": {
+            "artifactType": {
+              "schemaTitle": "system.Metrics",
+              "schemaVersion": "0.0.1"
+            }
+          },
+          "model-tuning-smetrics": {
+            "artifactType": {
+              "schemaTitle": "system.Metrics",
+              "schemaVersion": "0.0.1"
+            }
+          },
+          "model-tuning-vizier-smetrics": {
+            "artifactType": {
+              "schemaTitle": "system.Metrics",
+              "schemaVersion": "0.0.1"
+            }
+          }
+        }
+      }
+    },
+    "schemaVersion": "2.0.0",
+    "sdkVersion": "kfp-1.8.6"
+  },
+  "runtimeConfig": {
+    "gcsOutputDirectory": "gs://mlops-pipelines-artifacts/pipeline_root/"
+  }
+}

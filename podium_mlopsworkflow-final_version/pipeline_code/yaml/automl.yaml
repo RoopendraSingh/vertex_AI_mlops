@@ -1,0 +1,90 @@
+name: Auto ml exp
+inputs:
+- {name: trainfile, type: String}
+- {name: testfile, type: String}
+- {name: auto_ml_bucket, type: String}
+- {name: project, type: String}
+- {name: location, type: String}
+outputs:
+- {name: smetrics, type: Metrics}
+implementation:
+  container:
+    image: python:3.9
+    command:
+    - sh
+    - -c
+    - |2
+
+      if ! [ -x "$(command -v pip)" ]; then
+          python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip
+      fi
+
+      PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'numpy' 'pandas' 'google-cloud' 'google-cloud-storage' 'google-api-python-client' 'google-cloud-aiplatform' 'fsspec' 'gcsfs' 'kfp==1.8.6' && "$0" "$@"
+    - sh
+    - -ec
+    - |
+      program_path=$(mktemp -d)
+      printf "%s" "$0" > "$program_path/ephemeral_component.py"
+      python3 -m kfp.v2.components.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+    - "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing\
+      \ import *\n\ndef auto_ml_exp(trainfile: str,testfile: str, auto_ml_bucket:str,\
+      \ \n                project: str, location: str, smetrics: Output[Metrics]):\
+      \   \n    import pandas as pd\n    import numpy as np\n    from google.cloud\
+      \ import storage\n    from google.cloud import aiplatform\n    import fsspec\n\
+      \    \"\"\"\n    It runs AutoML tables\n    Inputs: train file path,\n     \
+      \       test file path,\n            region,project_id\n    outputs: shows f1-score\
+      \ as metrics\n    \"\"\"\n    #take train and test and merge it into one df\
+      \ with additional column for train,test split.\n    # UNASSIGNED: means automl\
+      \ take it as train or validation data\n    def train_test_merge (train_data,\
+      \ test_data,gcs_bucket):\n        train= pd.read_csv(train_data)\n        test=\
+      \ pd.read_csv(test_data)\n        train['split_cat']= 'UNASSIGNED'\n       \
+      \ test['split_cat']= 'TEST'\n        data= train.append(test)\n        data_path\
+      \ = f\"gs://{gcs_bucket}/data_auto_ml.csv\"\n        data.to_csv(data_path,\
+      \ index = False)\n        test_data_len= len(test)\n        return data_path,\
+      \ test_data_len    \n    #load the whole dataset to vertex AI and fetch the\
+      \ dataset ID. \n    def create_and_import_dataset_tabular_gcs(\n        display_name:\
+      \ str, \n        project: str, \n        location: str, \n        gcs_source,):\n\
+      \n        aiplatform.init(project=project, location=location)\n        dataset\
+      \ = aiplatform.TabularDataset.create(\n            display_name=display_name,\
+      \ gcs_source=gcs_source,)\n        dataset.wait()\n        res_name= dataset.resource_name\n\
+      \        print(f'\\tname: \"{res_name}\"')\n        #e.g = projects/844226895177/locations/us-central1/datasets/5221985340587245568\n\
+      \        dataset_id = res_name.split('/')[-1]\n        return (dataset_id)\n\
+      \    #create the autoML training job\n    def create_training_pipeline_tabular_classification(\n\
+      \        project: str,\n        display_name: str,\n        dataset_id: int,\n\
+      \        location: str,\n        target_col: str,\n        predefined_split_column_name:\
+      \ str= 'split_cat',\n        model_display_name: str = None,\n        #training_fraction_split:\
+      \ float = 0.75,(no need in case of explicitly mentioned in data)\n        #validation_fraction_split:\
+      \ float = 0.10,\n        #test_fraction_split: float = 0.15,\n        budget_milli_node_hours:\
+      \ int = 100,#(how many hours are allowed for training)\n        disable_early_stopping:\
+      \ bool = False,\n        sync:bool = True):\n\n        aiplatform.init(project=project,\
+      \ location=location)\n\n        tabular_classification_job = aiplatform.AutoMLTabularTrainingJob(\n\
+      \            display_name=display_name,\n            optimization_prediction_type=\
+      \ 'classification')\n        my_tabular_dataset = aiplatform.TabularDataset(dataset_id)\n\
+      \        print(my_tabular_dataset)\n        model = tabular_classification_job.run(\n\
+      \            dataset=my_tabular_dataset,\n            predefined_split_column_name=predefined_split_column_name,\n\
+      \            budget_milli_node_hours=budget_milli_node_hours,\n            model_display_name=model_display_name,\n\
+      \            disable_early_stopping=disable_early_stopping,\n            sync=sync,\n\
+      \            target_column=target_col,)\n        model.wait()\n        return\
+      \ model.resource_name\n    #this function is for getting the f1-score as model\
+      \ metrics\n    def getting_f1_score(\n        model_resource_name,\n       \
+      \ api_endpoint: str = \"us-central1-aiplatform.googleapis.com\",):\n\n     \
+      \   client_options = {\"api_endpoint\": api_endpoint}\n        client = aiplatform.gapic.ModelServiceClient(client_options=client_options)\n\
+      \        path= client.list_model_evaluations(parent = model_resource_name)\n\
+      \        for x in path:\n            metric= x.metrics['confidenceMetrics']\n\
+      \            for y in metric[51].items(): #for 0.5 threshold\n             \
+      \   if y[0]== 'f1Score':\n                    f1_score= y[1]\n             \
+      \       break\n        return (f1_score)\n    data_path, test_data_len= train_test_merge(trainfile,\
+      \ testfile, auto_ml_bucket)\n    data_id= create_and_import_dataset_tabular_gcs('automl_data',project,location,data_path)\n\
+      \    model_res_name= create_training_pipeline_tabular_classification(project,\n\
+      \                                                           'automl_model',\n\
+      \                                                           data_id,\n     \
+      \                                                      location,\n         \
+      \                                                  'class',)\n    f1_score_=\
+      \ getting_f1_score(model_res_name)\n    smetrics.log_metric(\"F1-Score_1\",f1_score_)\n\
+      \    smetrics.log_metric(\"framework\", \"XGB Classifier\")\n    smetrics.log_metric(\"\
+      dataset_size\", test_data_len)\n    return None\n\n"
+    args:
+    - --executor_input
+    - {executorInput: null}
+    - --function_to_execute
+    - auto_ml_exp

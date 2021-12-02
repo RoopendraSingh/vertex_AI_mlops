@@ -1,0 +1,92 @@
+name: Data validation
+inputs:
+- {name: gcs_file, type: String}
+outputs:
+- {name: data_validation_sucess_output_flag, type: Boolean}
+implementation:
+  container:
+    image: python:3.9
+    command:
+    - sh
+    - -c
+    - |2
+
+      if ! [ -x "$(command -v pip)" ]; then
+          python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip
+      fi
+
+      PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'pandas' 'scipy' 'numpy' 'google-api-python-client' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'kfp==1.8.6' && "$0" "$@"
+    - sh
+    - -ec
+    - |
+      program_path=$(mktemp -d)
+      printf "%s" "$0" > "$program_path/ephemeral_component.py"
+      python3 -m kfp.v2.components.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+    - "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing\
+      \ import *\n\ndef data_validation(gcs_file: str)-> NamedTuple(\"Outputs\", [(\"\
+      data_validation_sucess_output_flag\", bool)]):\n\n    import pandas as pd\n\
+      \    import numpy as np\n    import pickle\n    from scipy import stats\n  \
+      \  from google.cloud import storage\n\n    '''\n    Inputs:\n    GCSFile : Entire\
+      \ path and name of the csv file of training data\n    generationNumber: Object\
+      \ generation number\n    timeStamp: Object generation timestamp\n\n    Function\
+      \ details:\n    This function is used to perform data validation to identify:\n\
+      \    1. Outlier detection -\n    Use of Interquartile range rule to detect outliers\
+      \ and raise alerts.\n    2. Data schema matching -\n    Checking the data types\
+      \ of ingested data features with the respective \n    target data types.\n \
+      \   3. Missing data check -\n    Check for missing data in the dataframe and\
+      \ raise alerts if missing\n    values are detected in the dataframe.\n    '''\n\
+      \n    # Read input ingested data\n    raw_data_in = pd.read_csv(gcs_file)\n\
+      \    def outlier_detection(df):\n        df_numerical_cols = df.select_dtypes(include=['float64',\
+      \ 'int64'])\n        # Emulation of box plots\n        Q1 = df_numerical_cols.quantile(0.25)\n\
+      \        Q3 = df_numerical_cols.quantile(0.75)\n        # Interquartile range\
+      \  \n        IQR = Q3 - Q1\n        # print(IQR)\n        # Use Interquartile\
+      \ range rule to detect presence of outliers in the data\n        outlier_bool\
+      \ = (df_numerical_cols < (Q1 - 1.5 * IQR)) |(df_numerical_cols > (Q3 + 1.5 *\
+      \ IQR))\n        # print(outlier_bool)\n        # Curate the datapoint indices\
+      \ which are outliers\n        outlier_idx = list(np.where(np.array(outlier_bool.all(axis=1))\
+      \ == True)[0])\n        # print(len(outlier_idx))\n        print(\"-\"*20)\n\
+      \        print(\"Check 1: Outlier detection\")\n        # Raise alert if outliers\
+      \ are detected\n        if len(outlier_idx) != 0:\n            print(\" ---\
+      \ ALERT : Outliers detected in the dataset --- \")\n            print(\"Outliers\
+      \ are at the following index in the Dataframe: \")\n            print(outlier_idx)\n\
+      \            outlier_detection_flag = False\n        else: \n            print(\"\
+      --- PASS : No outliers detected ---\")\n            outlier_detection_flag =\
+      \ True\n        print(\"-\"*20)\n        return outlier_detection_flag\n\n \
+      \   def schema_check(df):\n        # Get the data type schema in the ingested\
+      \ data\n        trainData_schema = dict(df.dtypes)\n        # Load the target\
+      \ schema file\n        storage_client = storage.Client()\n        bucket = storage_client.bucket('mlops-data-validation')\n\
+      \        blob = bucket.blob('data_schema.pickle')\n        pickle_in = blob.download_as_string()\n\
+      \        target_schema = pickle.loads(pickle_in)\n        # Check if the ingested\
+      \ data feature data types match the target \n        # and raise alerts if they\
+      \ don't\n        print(\"Check 2: Data schema matching\")\n        if trainData_schema\
+      \ == target_schema:\n            print(\"--- PASS : Data types match the expected\
+      \ data types ---\")\n            schema_check_flag = True\n        else: \n\
+      \            print(\"--- ALERT : Data types do not match the expected data types\
+      \ ---\")\n            schema_check_flag = False\n        print(\"-\"*20)\n \
+      \       return schema_check_flag\n\n    def missing_val_check(df):    \n   \
+      \     # Check for NaN values/missing values\n        missing_val_list = np.asarray(df.isnull().any(axis=1))\n\
+      \        # Find the indices of the datapoints where missing values are detected\n\
+      \        missing_val_idx = list(np.where(missing_val_list == True)[0])\n   \
+      \     # Raise alerts if presence of missing values are detected\n        print(\"\
+      Check 3: Missing data check\")\n        if len(missing_val_idx) == 0: \n   \
+      \         print(\"--- PASS : No missing values detected ---\")\n           \
+      \ missing_val_flag = True\n        else: \n            print(\"--- ALERT : Missing\
+      \ values detected in the dataset ---\")\n            print(\"Missing values\
+      \ detected in the datapoints at the following indices:\",missing_val_idx)\n\n\
+      \            # Calculate the percentage of datapoints/rows containing missing\
+      \ values\n            total_rows_df = df.shape[0]\n            rows_missing_vals_df\
+      \ = len(missing_val_idx)\n            missing_data_percent = round((rows_missing_vals_df/total_rows_df)*100,\
+      \ 2)\n            print(\"{} % of datapoints in the given data contain missing\
+      \ values.\".format(missing_data_percent))\n            missing_val_flag = False\n\
+      \        print(\"-\"*20)\n        return missing_val_flag\n    # Check 1: Outlier\
+      \ detection\n    Oulier_flag = outlier_detection(raw_data_in)\n    # Check 2:\
+      \ Data schema matching\n    schema_flag = schema_check(raw_data_in)\n    # Check\
+      \ 3: Missing data check\n    missing_flag = missing_val_check(raw_data_in)\n\
+      \n    if Oulier_flag==False or schema_flag == False or missing_flag == False:\n\
+      \        data_validation_suceess_flag = False\n    else:\n        data_validation_suceess_flag\
+      \ = True\n    return (data_validation_suceess_flag,)\n\n"
+    args:
+    - --executor_input
+    - {executorInput: null}
+    - --function_to_execute
+    - data_validation

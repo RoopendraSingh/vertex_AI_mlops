@@ -1,0 +1,83 @@
+name: Model evaluation vizier
+description: This function make predictions from vizier model and calculate F1 score
+inputs:
+- {name: model, type: Model}
+- {name: MODEL_BUCKET_NAME, type: String}
+- {name: BUCKET_NAME_THRESHOLD, type: String}
+- {name: BUCKET_NAME_TESTING, type: String}
+outputs:
+- {name: metrics, type: Metrics}
+- {name: check, type: Boolean}
+- {name: new_model_path, type: String}
+implementation:
+  container:
+    image: python:3.9
+    command:
+    - sh
+    - -c
+    - |2
+
+      if ! [ -x "$(command -v pip)" ]; then
+          python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip
+      fi
+
+      PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'sklearn' 'pandas' 'google-api-python-client' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'argparse' 'google-cloud-aiplatform==1.1.1' 'xgboost' 'numpyencoder' 'kfp==1.8.6' && "$0" "$@"
+    - sh
+    - -ec
+    - |
+      program_path=$(mktemp -d)
+      printf "%s" "$0" > "$program_path/ephemeral_component.py"
+      python3 -m kfp.v2.components.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+    - |2+
+
+      import kfp
+      from kfp.v2 import dsl
+      from kfp.v2.dsl import *
+      from typing import *
+
+      def model_evaluation_vizier(model:Input[Model],MODEL_BUCKET_NAME: str, BUCKET_NAME_THRESHOLD: str, BUCKET_NAME_TESTING: str,metrics: Output[Metrics])-> NamedTuple("Outputs", [("check", bool),("new_model_path",str)]):
+          '''
+                This function make predictions from vizier model and calculate F1 score
+                INPUTS : model path, latest test data
+                OUTPUTS : none
+          '''
+          import argparse
+          import numpy as np
+          import pandas as pd
+          import os
+          from sklearn.metrics import f1_score
+          from google.cloud import aiplatform
+          import json
+          from google.cloud import storage
+          import gcsfs
+          import pickle
+          from numpyencoder import NumpyEncoder
+          from xgboost import XGBClassifier
+
+          model_path = model.uri
+          new_test_data = pd.read_csv(BUCKET_NAME_TESTING)
+          x_test_data=new_test_data.drop('class',axis=1)
+          y_test_data=new_test_data['class']
+          storage_client = storage.Client()
+          bucket = storage_client.get_bucket(model_path.split("/")[2])
+          blob_name = model_path.split('/')[3:]
+          blob_name = "/".join(blob_name)+'.bst'
+          blob = bucket.blob(blob_name)
+          blob.download_to_filename("model_sklearn_viz.bst")
+          model3 = XGBClassifier()
+          model3.load_model('model_sklearn_viz.bst')
+          model_name = 'model_sklearn_viz.bst'
+          y_pred = model3.predict(x_test_data)
+          model_metrics=f1_score(y_test_data,y_pred,average=None)
+          metrics.log_metric("F1-Score_0",model_metrics[0])
+          metrics.log_metric("F1-Score_1",model_metrics[1])
+          metrics.log_metric("framework", "XGB Classifier")
+          metrics.log_metric("dataset_size", len(new_test_data))
+
+          return None
+
+    args:
+    - --executor_input
+    - {executorInput: null}
+    - --function_to_execute
+    - model_evaluation_vizier

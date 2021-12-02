@@ -1,0 +1,71 @@
+name: Model training vizier
+description: This function uses the hyper-parameters using vizier
+inputs:
+- {name: tuned_hp, type: String}
+- {name: trainfile, type: String}
+outputs:
+- {name: model, type: Model}
+implementation:
+  container:
+    image: python:3.9
+    command:
+    - sh
+    - -c
+    - |2
+
+      if ! [ -x "$(command -v pip)" ]; then
+          python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip
+      fi
+
+      PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'numpy' 'sklearn' 'pandas' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'xgboost' 'hyperopt' 'kfp==1.8.6' && "$0" "$@"
+    - sh
+    - -ec
+    - |
+      program_path=$(mktemp -d)
+      printf "%s" "$0" > "$program_path/ephemeral_component.py"
+      python3 -m kfp.v2.components.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+    - "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing\
+      \ import *\n\ndef model_training_vizier(tuned_hp: str, trainfile: str,model:Output[Model]):\n\
+      \    #-> NamedTuple(\"Outputs\", [(\"model_path\", str)]):\n    \"\"\"This function\
+      \ uses the hyper-parameters using vizier\n       and trains a XGBClassifier\
+      \ for churn prediction\n       Inputs: Json contains hyperparametrs, train file\
+      \ path\n       Output: file path of saved model\n    \"\"\"\n    from xgboost\
+      \ import XGBClassifier\n    import pandas as pd\n    from hyperopt import hp,\
+      \ fmin, tpe, rand, STATUS_OK, Trials\n    from sklearn.model_selection import\
+      \ KFold\n    from sklearn.model_selection import cross_val_score\n    from sklearn.model_selection\
+      \ import GridSearchCV\n    from sklearn.model_selection import RandomizedSearchCV\n\
+      \    from sklearn.model_selection import RepeatedStratifiedKFold\n    from sklearn.metrics\
+      \ import classification_report\n    import time\n    import numpy as np\n  \
+      \  import pickle\n    from hyperopt import space_eval\n    from hyperopt import\
+      \ Trials\n    from google.cloud import storage\n    import gcsfs\n    import\
+      \ json\n    # Set up the XGBoost version\n    # Declare xgboost search space\
+      \ for Hyperopt\n    # Get best model in a dict format.\n    train = pd.read_csv(trainfile)\n\
+      \    train_features = train.drop(['class'], axis=1)\n    train_target = train['class']\n\
+      \    file_system = gcsfs.GCSFileSystem()\n    best_model = json.load(file_system.open(tuned_hp,\
+      \ 'rb'))\n    # Create the pipeline and set hyperparameters.\n    exported_pipeline\
+      \ = XGBClassifier(eta=best_model.get('eta'), \n                            \
+      \          gamma=best_model.get('gamma'),\n                                \
+      \      colsample_bylevel=best_model.get('colsample_bylevel'),\n            \
+      \                          colsample_bytree=best_model.get('colsample_bytree'),\n\
+      \                                      eval_metric=best_model.get('eval_metric'),\n\
+      \                                      learning_rate=best_model.get('learning_rate'),\
+      \ \n                                      max_depth=int(best_model.get('max_depth')),\
+      \ \n                                      min_child_weight=best_model.get('min_child_rate'),\
+      \ \n                                      n_estimators=int(best_model.get('n_estimators')),\
+      \ \n                                      n_jobs=-1, \n                    \
+      \                  booster=best_model.get('booster'),\n                    \
+      \                  subsample=best_model.get('subsample'), \n               \
+      \                       tree_method=best_model.get('tree_method'), \n      \
+      \                                verbosity=0,\n                            \
+      \          use_label_encoder = False,\n                                    \
+      \  early_stopping_rounds=10)\n    # Fix random state in exported estimator\n\
+      \    if hasattr(exported_pipeline, 'random_state'):\n        setattr(exported_pipeline,\
+      \ 'random_state', 1114)\n    # Fit model\n    exported_pipeline.fit(train_features,\
+      \ train_target)\n    print(\"Training Sucessfully Completed\")\n    #dumping\
+      \ the model to gcs bucket.\n    exported_pipeline.save_model(\"model_sklearn_viz.bst\"\
+      )\n    exported_pipeline.save_model(model.path+\".bst\")\n\n"
+    args:
+    - --executor_input
+    - {executorInput: null}
+    - --function_to_execute
+    - model_training_vizier

@@ -1,0 +1,67 @@
+name: Data transformation
+description: This the Preprocessing functions checks for NA ,
+inputs:
+- {name: gcs_file, type: String}
+- {name: bucket_tranformed_data, type: String}
+outputs:
+- {name: train_data, type: String}
+- {name: test_data, type: String}
+implementation:
+  container:
+    image: python:3.9
+    command:
+    - sh
+    - -c
+    - |2
+
+      if ! [ -x "$(command -v pip)" ]; then
+          python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip
+      fi
+
+      PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'numpy' 'sklearn' 'pandas' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'kfp==1.8.6' && "$0" "$@"
+    - sh
+    - -ec
+    - |
+      program_path=$(mktemp -d)
+      printf "%s" "$0" > "$program_path/ephemeral_component.py"
+      python3 -m kfp.v2.components.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+    - |2+
+
+      import kfp
+      from kfp.v2 import dsl
+      from kfp.v2.dsl import *
+      from typing import *
+
+      def data_transformation(gcs_file: str, bucket_tranformed_data: str)->NamedTuple("Outputs", [("train_data", str),("test_data", str)]):
+          """This the Preprocessing functions checks for NA ,
+             drops them  and splits the dataset in to test train splits
+             Inputs: File path
+             Outputs: train and test datavser file paths
+             """
+          import pandas as pd
+          from sklearn.model_selection import train_test_split
+
+          churn = pd.read_csv(gcs_file)
+          churn.dropna(inplace=True)
+          churn.reset_index(inplace=True, drop=True)
+          print("Dropped all the NAs")
+          # Rename depvar to class as required by TPOT
+          churn.rename(columns={'event': 'class'}, inplace=True)
+          # Create depvar in separate data set.
+          churn_class = churn['class'].values
+          training_indices, testing_indices = train_test_split(churn.index,stratify = churn_class,
+                                                               train_size=0.75,test_size=0.25,
+                                                               random_state = 1114)
+          lifetime_enriched_train_rows_qp = churn.iloc[training_indices, :]
+          lifetime_enriched_test_rows_qp = churn.iloc[testing_indices, :]
+          train_data = f"gs://{bucket_tranformed_data}/train.csv"
+          test_data = f"gs://{bucket_tranformed_data}/test.csv"
+          lifetime_enriched_train_rows_qp.to_csv(train_data, index = False)
+          lifetime_enriched_test_rows_qp.to_csv(test_data, index = False)
+          return (train_data,test_data,)
+
+    args:
+    - --executor_input
+    - {executorInput: null}
+    - --function_to_execute
+    - data_transformation

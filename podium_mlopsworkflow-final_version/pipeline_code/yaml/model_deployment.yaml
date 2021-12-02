@@ -1,0 +1,125 @@
+name: Model deployment
+description: This function will upload the model to Vertex AI then deploy the model
+  to endpoint, if endpoint doesn't exist
+inputs:
+- {name: model_path, type: String}
+- {name: flag, type: Boolean}
+- {name: PROJECT_ID, type: String}
+- {name: PROJECT_NUMBER, type: String}
+- {name: REGION, type: String}
+- {name: PIPELINE_NAME, type: String}
+outputs:
+- {name: metrics, type: Metrics}
+- {name: endpoint_name, type: String}
+implementation:
+  container:
+    image: python:3.9
+    command:
+    - sh
+    - -c
+    - |2
+
+      if ! [ -x "$(command -v pip)" ]; then
+          python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip
+      fi
+
+      PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'google-api-python-client' 'gcsfs' 'google-cloud' 'google-cloud-storage' 'argparse' 'google-cloud-aiplatform==1.1.1' 'typing' 'kfp==1.8.6' && "$0" "$@"
+    - sh
+    - -ec
+    - |
+      program_path=$(mktemp -d)
+      printf "%s" "$0" > "$program_path/ephemeral_component.py"
+      python3 -m kfp.v2.components.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+    - "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing\
+      \ import *\n\ndef model_deployment(model_path: str, flag: bool, PROJECT_ID:\
+      \ str, PROJECT_NUMBER: str, REGION: str, PIPELINE_NAME: str,\n             \
+      \        metrics:Output[Metrics])-> NamedTuple(\"Outputs\", [(\"endpoint_name\"\
+      , str)]):\n    '''\n       This function will upload the model to Vertex AI\
+      \ then deploy the model to endpoint, if endpoint doesn't exist\n       then\
+      \ it will create the endpoint and then deploy the model.\n       INPUTS: model_path\
+      \ - model path from model_E_V_R function\n               flag       - deployment\
+      \ decision\n       OUTPUTS: endpoint_name  - name of the endpoint\n    '''\n\
+      \    from google.cloud.aiplatform import gapic as aip\n    from google.cloud\
+      \ import aiplatform\n    from typing import Dict, Optional\n    #from google.cloud\
+      \ import aiplatform_v1\n    project_id = PROJECT_ID\n    project_region = REGION\n\
+      \    #gcs_bucket = model_path.split(\"/model.bst\")[0]\n    display_name = PIPELINE_NAME\
+      \ + model_path.split(\"/\")[-2]\n    saved_model_path = model_path.split(\"\
+      /model.bst\")[0]\n    serving_container_image_uri = 'us-docker.pkg.dev/vertex-ai/prediction/xgboost-cpu.1-4:latest'\n\
+      \    PROJECT_NUMBER = PROJECT_NUMBER\n    flag=flag\n    #Function to upload\
+      \ model to Vertex AI\n    def upload_model(\n        project: str,\n       \
+      \ location: str,\n        display_name: str,\n        serving_container_image_uri:\
+      \ str,\n        artifact_uri: str,\n        sync: bool = True,):\n        aiplatform.init(project=project,\
+      \ location=location)\n        model = aiplatform.Model.upload(\n          display_name=display_name,\n\
+      \          artifact_uri=artifact_uri,\n          serving_container_image_uri=serving_container_image_uri,\n\
+      \          sync=sync,)\n        model.wait()\n        print(model.display_name)\n\
+      \        print(model.resource_name)\n        return model\n    #Function to\
+      \ create endpoint\n    def create_endpoint(project_id: str, display_name: str,\
+      \ project_region: str, sync: bool = True,):\n        aiplatform.init(project=project_id,\
+      \ location=project_region)\n        endpoint = aiplatform.Endpoint.create(\n\
+      \          display_name=display_name, project=project_id, location=project_region,)\n\
+      \        print(endpoint.display_name)\n        print(endpoint.resource_name)\n\
+      \        return endpoint\n    #Function to deploy a model\n    def deploy_model_with_dedicated_resources(\n\
+      \        project: str,\n        location: str,\n        model_name: str,\n \
+      \       machine_type: str,\n        PROJECT_NUMBER: str,\n        deployed_model_display_name:\
+      \ Optional[str] = None,\n        endpoint: Optional[aiplatform.Endpoint] = None,\n\
+      \        traffic_split: Optional[Dict[str, int]] = None,\n        min_replica_count:int\
+      \ = 1,\n        max_replica_count:int = 1,\n        sync: bool = True,):\n \
+      \       aiplatform.init(project=project, location=location)\n        model =\
+      \ aiplatform.Model(model_name=model_name)\n        model.deploy(\n         \
+      \   endpoint=endpoint,\n            deployed_model_display_name=deployed_model_display_name,\n\
+      \            traffic_split={\"0\":100},\n            machine_type=machine_type,\n\
+      \            min_replica_count=min_replica_count,\n            max_replica_count=max_replica_count,\n\
+      \            sync=True,)\n        model.wait()\n        print(model.display_name)\n\
+      \        print(model.resource_name)\n        return model\n    #Uploading validated\
+      \ model to Vertex AI\n    model=upload_model(\n        project_id,project_region,display_name,serving_container_image_uri,saved_model_path)\n\
+      \    model_name=model.resource_name\n    aiplatform.init(project=project_id,\
+      \ location=project_region)\n    api_endpoint = f\"{project_region}-aiplatform.googleapis.com\"\
+      \  # @param {type:\"string\"}\n    client_options = {\"api_endpoint\": api_endpoint}\n\
+      \    client = aip.EndpointServiceClient(client_options=client_options)\n   \
+      \ endpoints_all = client.list_endpoints(parent=f'projects/{PROJECT_NUMBER}/locations/{project_region}')\n\
+      \    #endpoint_id = ''\n    endpoint_exists = False\n    #deployed_model = ''\n\
+      \    #endpoint_name = display_name\n    for oneEnd in endpoints_all:\n     \
+      \   if oneEnd.display_name == display_name:\n            print(oneEnd.display_name)\n\
+      \            print(oneEnd.name)\n            endpoint_exists = True\n      \
+      \      endpoint_id = oneEnd.name\n            for oneModel in oneEnd.deployed_models:\n\
+      \                print(oneModel.model)\n                deployed_model_id =\
+      \ oneModel.model.split('/')[-1]\n                deployed_model = oneModel.model\n\
+      \    if flag == True and endpoint_exists == True:\n        aiplatform.init(project=project_id,\
+      \ location=project_region)\n        endpoint1=aiplatform.Endpoint(endpoint_name=endpoint_id,\
+      \ project= project_id, location= project_region,)\n        endpoint1.undeploy_all()\n\
+      \        endpoint_name = endpoint_id\n        deploy_model_with_dedicated_resources(\n\
+      \            project=project_id,\n            location=project_region,\n   \
+      \         model_name=model_name,\n            machine_type='n1-standard-4',\n\
+      \            PROJECT_NUMBER=PROJECT_NUMBER,\n            deployed_model_display_name=display_name,\n\
+      \            endpoint = endpoint1,\n            traffic_split={\"0\":100},\n\
+      \            min_replica_count = 1,\n            max_replica_count = 1,\n  \
+      \          sync= True,\n        )\n        metrics.log_metric(\"previously-deployed-model\"\
+      ,deployed_model)\n        metrics.log_metric(\"newly-deployed-model\",model_name)\n\
+      \        metrics.log_metric(\"current-model\",model_name)\n        metrics.log_metric(\"\
+      endpoint\", endpoint_name)\n    elif flag == True and endpoint_exists == False:\n\
+      \        #Creating endpoint\n        endpoint=create_endpoint(project_id, display_name,\
+      \ project_region)\n        endpoint_name=endpoint.resource_name \n        #Deploying\
+      \ Validated model to endpoint\n        deploy_model_with_dedicated_resources(\n\
+      \            project=project_id,\n            location=project_region,\n   \
+      \         model_name=model_name,\n            machine_type='n1-standard-4',\n\
+      \            PROJECT_NUMBER=PROJECT_NUMBER,\n            deployed_model_display_name=display_name,\n\
+      \            endpoint = endpoint,\n            traffic_split={\"0\":100},\n\
+      \            min_replica_count = 1,\n            max_replica_count = 1,\n  \
+      \          sync= True,\n        )\n        metrics.log_metric(\"previously-deployed-model\"\
+      ,\"no model deployed yet\")\n        metrics.log_metric(\"newly-deployed-model\"\
+      ,model_name)\n        metrics.log_metric(\"current-model\",model_name)\n   \
+      \     metrics.log_metric(\"endpoint\", endpoint_name)\n    elif flag == False\
+      \ and endpoint_exists == True:\n        endpoint_name = endpoint_id\n      \
+      \  metrics.log_metric(\"previously-deployed-model\",deployed_model)\n      \
+      \  metrics.log_metric(\"newly-deployed-model\",\"not-deployed\")\n        metrics.log_metric(\"\
+      current-model\",model_name)\n        metrics.log_metric(\"endpoint\", endpoint_name)\n\
+      \    elif flag == False and endpoint_exists == False:\n        endpoint_name\
+      \ = 'none'\n        metrics.log_metric(\"previously-deployed-model\",\"no model\
+      \ deployed yet\")\n        metrics.log_metric(\"newly-deployed-model\",\"not-deployed\"\
+      )\n        metrics.log_metric(\"current-model\",model_name)\n        metrics.log_metric(\"\
+      endpoint\", endpoint_name)\n    return (endpoint_name, )\n\n"
+    args:
+    - --executor_input
+    - {executorInput: null}
+    - --function_to_execute
+    - model_deployment
